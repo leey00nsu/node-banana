@@ -1,13 +1,13 @@
 "use client";
+import { CanvasSelect, CanvasInput } from "../../leesfield/inputs";
+
+
+import { useCanvasTranslation } from "../../leesfield/localization";
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { ProviderType, ModelInputDef } from "@/types";
-import { ModelParameter } from "@/lib/providers/types";
-import { useProviderApiKeys } from "@/store/workflowStore";
-import { deduplicatedFetch } from "@/utils/deduplicatedFetch";
+import type { ProviderType, ModelInputDef, ModelParameter } from "../../leesfield/upstream-node-host";
+import { useProviderApiKeys, deduplicatedFetch } from "../../leesfield/upstream-node-host";
 
-// localStorage cache for model schemas (persists across dev server restarts)
-const SCHEMA_CACHE_KEY = "node-banana-schema-cache";
 const SCHEMA_CACHE_TTL = 48 * 60 * 60 * 1000; // 48 hours
 
 interface SchemaCacheEntry {
@@ -16,28 +16,21 @@ interface SchemaCacheEntry {
   timestamp: number;
 }
 
+const schemaCache = new Map<string, SchemaCacheEntry>();
+
 function getCachedSchema(modelId: string, provider: string): SchemaCacheEntry | null {
-  try {
-    const cache = JSON.parse(localStorage.getItem(SCHEMA_CACHE_KEY) || "{}");
-    const key = `${provider}:${modelId}`;
-    const entry = cache[key];
-    if (entry && Date.now() - entry.timestamp < SCHEMA_CACHE_TTL) {
-      return entry;
-    }
-  } catch {
-    // Ignore cache errors
+  const key = `${provider}:${modelId}`;
+  const entry = schemaCache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.timestamp >= SCHEMA_CACHE_TTL) {
+    schemaCache.delete(key);
+    return null;
   }
-  return null;
+  return entry;
 }
 
 function setCachedSchema(modelId: string, provider: string, parameters: ModelParameter[], inputs: ModelInputDef[]) {
-  try {
-    const cache = JSON.parse(localStorage.getItem(SCHEMA_CACHE_KEY) || "{}");
-    cache[`${provider}:${modelId}`] = { parameters, inputs, timestamp: Date.now() };
-    localStorage.setItem(SCHEMA_CACHE_KEY, JSON.stringify(cache));
-  } catch {
-    // Ignore cache errors
-  }
+  schemaCache.set(`${provider}:${modelId}`, { parameters, inputs, timestamp: Date.now() });
 }
 
 /** Reorder items so they read column-first in a row-based CSS grid.
@@ -76,6 +69,7 @@ function ModelParametersInner({
   onExpandChange,
   onInputsLoaded,
 }: ModelParametersProps) {
+  const tc = useCanvasTranslation();
   const [schema, setSchema] = useState<ModelParameter[]>([]);
   // Tracks which `${provider}:${modelId}` the current `schema` belongs to.
   // Prevents the defaults effect from writing a previous model's defaults into
@@ -103,7 +97,7 @@ function ModelParametersInner({
     let cancelled = false;
 
     const fetchSchema = async () => {
-      // Check localStorage cache first
+      // Check the in-memory schema cache first.
       const cached = getCachedSchema(modelId, provider);
       if (cached) {
         if (cancelled) return;
@@ -163,6 +157,10 @@ function ModelParametersInner({
         setError(err instanceof Error ? err.message : "Failed to fetch schema");
         setSchema([]);
         setSchemaKey(currentKey);
+        // The previous model's dynamic handles are no longer valid when the
+        // replacement schema fails to load. Clear them at the same host
+        // boundary used for a successful empty schema.
+        onInputsLoaded?.([]);
       } finally {
         if (!cancelled) setIsLoading(false);
       }
@@ -210,7 +208,7 @@ function ModelParametersInner({
       const newParams = { ...parameters };
 
       // If value is empty/undefined, remove the parameter
-      if (value === "" || value === undefined || value === null) {
+      if (value === "" || value === undefined) {
         delete newParams[name];
       } else {
         newParams[name] = value;
@@ -277,9 +275,9 @@ function ModelParametersInner({
       {error ? (
         <span className="text-[9px] text-red-400">{error}</span>
       ) : isLoading ? (
-        <span className="text-[9px] text-neutral-500">Loading parameters...</span>
+        <span className="text-[9px] text-neutral-500">{tc("Loading parameters...")}</span>
       ) : schema.length === 0 ? (
-        <span className="text-[9px] text-neutral-500">No parameters available</span>
+        <span className="text-[9px] text-neutral-500">{tc("No parameters available")}</span>
       ) : (
         <div
           ref={gridRef}
@@ -316,16 +314,18 @@ interface ParameterInputProps {
  * cursor-jump issues caused by React Flow re-renders on store updates.
  */
 function ParameterInputInner({ param, name, value, onChange }: ParameterInputProps) {
+  const tc = useCanvasTranslation();
   // Stable callback that passes name along with value
   const handleChange = useCallback((value: unknown) => {
     onChange(name, value);
   }, [name, onChange]);
-  const displayName = param.name
+  const displayName = param.label || param.name
     .replace(/_/g, " ")
     .replace(/\b\w/g, (c) => c.toUpperCase());
 
   // Local state for text/number inputs to prevent cursor jumping
   const [localValue, setLocalValue] = useState<string>(() => {
+    if(param.type==="json")return value===undefined?"":JSON.stringify(value);
     if (value === undefined || value === null) return "";
     return String(value);
   });
@@ -334,9 +334,9 @@ function ParameterInputInner({ param, name, value, onChange }: ParameterInputPro
   // Sync from store when not focused (external changes)
   useEffect(() => {
     if (!isFocusedRef.current) {
-      setLocalValue(value === undefined || value === null ? "" : String(value));
+      setLocalValue(param.type==="json"?(value===undefined?"":JSON.stringify(value)):value === undefined || value === null ? "" : String(value));
     }
-  }, [value]);
+  }, [value,param.type]);
 
   // Determine input type and render accordingly
   if (param.enum && param.enum.length > 0) {
@@ -349,7 +349,7 @@ function ParameterInputInner({ param, name, value, onChange }: ParameterInputPro
         >
           {displayName}
         </label>
-        <select
+        <CanvasSelect aria-label={displayName}
           value={(value as string) ?? ""}
           onChange={(e) => {
             const val = e.target.value;
@@ -367,13 +367,13 @@ function ParameterInputInner({ param, name, value, onChange }: ParameterInputPro
           }}
           className="nodrag nopan flex-1 min-w-0 text-[11px] py-1 px-2 rounded-md bg-[#1a1a1a] focus:outline-none focus:ring-1 focus:ring-neutral-600 text-white"
         >
-          <option value="">Default</option>
+          <option value="">{tc("Default")}</option>
           {param.enum.map((opt) => (
             <option key={String(opt)} value={String(opt)}>
               {String(opt)}
             </option>
           ))}
-        </select>
+        </CanvasSelect>
       </div>
     );
   }
@@ -388,7 +388,7 @@ function ParameterInputInner({ param, name, value, onChange }: ParameterInputPro
         className="flex items-center gap-1.5 text-[11px] text-neutral-300 cursor-pointer"
         title={param.description || undefined}
       >
-        <input
+        <CanvasInput
           type="checkbox"
           checked={effectiveValue}
           onChange={(e) => handleChange(e.target.checked)}
@@ -435,7 +435,7 @@ function ParameterInputInner({ param, name, value, onChange }: ParameterInputPro
             value={localValue}
             min={param.minimum}
             max={param.maximum}
-            step={param.type === "integer" ? 1 : 0.1}
+            step={param.multipleOf ?? (param.type === "integer" ? 1 : "any")}
             onFocus={() => { isFocusedRef.current = true; }}
             onChange={(e) => {
               setLocalValue(e.target.value);
@@ -464,9 +464,15 @@ function ParameterInputInner({ param, name, value, onChange }: ParameterInputPro
     );
   }
 
-  // Skip array type for now (complex)
-  if (param.type === "array") {
-    return null;
+  if (param.type === "array" || param.type === "json") {
+    let valid=true;
+    try {if(localValue.trim())JSON.parse(localValue);}catch{valid=false;}
+    return <label className="flex flex-col gap-1 text-[11px] text-neutral-400">{displayName} (JSON{param.nullable?" / null":""})
+      <textarea aria-label={displayName} aria-invalid={!valid} className="nodrag nopan rounded border border-neutral-700 bg-neutral-900 p-2 text-white" value={localValue}
+        onFocus={()=>{isFocusedRef.current=true;}} onChange={e=>{setLocalValue(e.target.value);if(e.target.value.trim()){try{handleChange(JSON.parse(e.target.value));}catch{handleChange(e.target.value);}}else handleChange(undefined);}}
+        onBlur={()=>{isFocusedRef.current=false;}}/>
+      {!valid&&<span role="alert">{tc("Invalid JSON")}</span>}
+    </label>;
   }
 
   // Default: string input — uses local state, syncs to store on blur

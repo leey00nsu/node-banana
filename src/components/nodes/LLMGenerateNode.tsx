@@ -1,7 +1,12 @@
 "use client";
+import { CanvasSelect, CanvasInput } from "../../leesfield/inputs";
+
+
+import { useCanvasTranslation } from "../../leesfield/localization";
+import { Handle } from "../../leesfield/port-handle";
 
 import { useCallback, useEffect, useState } from "react";
-import { Handle, Position, NodeProps, Node } from "@xyflow/react";
+import { Position, NodeProps, Node } from "@xyflow/react";
 import { BaseNode } from "./BaseNode";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { LLMGenerateNodeData, LLMProvider, LLMModelType } from "@/types";
@@ -39,6 +44,7 @@ const LLM_MODELS: Record<LLMProvider, { value: LLMModelType; label: string }[]> 
 type LLMGenerateNodeType = Node<LLMGenerateNodeData, "llmGenerate">;
 
 export function LLMGenerateNode({ id, data, selected }: NodeProps<LLMGenerateNodeType>) {
+  const tc = useCanvasTranslation();
   const nodeData = data;
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
 
@@ -155,8 +161,8 @@ export function LLMGenerateNode({ id, data, selected }: NodeProps<LLMGenerateNod
             <div className="space-y-1.5 max-w-[280px]">
               {/* Provider */}
               <div className="flex items-center gap-2">
-                <label className="text-[11px] text-neutral-400 shrink-0">Provider</label>
-                <select
+                <label className="text-[11px] text-neutral-400 shrink-0">{tc("Provider")}</label>
+                <CanvasSelect
                   value={provider}
                   onChange={handleProviderChange}
                   className="nodrag nopan flex-1 min-w-0 text-[11px] py-1 px-2 bg-[#1a1a1a] rounded-md focus:outline-none focus:ring-1 focus:ring-neutral-600 text-white"
@@ -164,13 +170,13 @@ export function LLMGenerateNode({ id, data, selected }: NodeProps<LLMGenerateNod
                   {LLM_PROVIDERS.map(p => (
                     <option key={p.value} value={p.value}>{p.label}</option>
                   ))}
-                </select>
+                </CanvasSelect>
               </div>
 
               {/* Model */}
               <div className="flex items-center gap-2">
-                <label className="text-[11px] text-neutral-400 shrink-0">Model</label>
-                <select
+                <label className="text-[11px] text-neutral-400 shrink-0">{tc("Model")}</label>
+                <CanvasSelect
                   value={nodeData.model || availableModels[0].value}
                   onChange={handleModelChange}
                   className="nodrag nopan flex-1 min-w-0 text-[11px] py-1 px-2 bg-[#1a1a1a] rounded-md focus:outline-none focus:ring-1 focus:ring-neutral-600 text-white"
@@ -178,15 +184,14 @@ export function LLMGenerateNode({ id, data, selected }: NodeProps<LLMGenerateNod
                   {availableModels.map(m => (
                     <option key={m.value} value={m.value}>{m.label}</option>
                   ))}
-                </select>
+                </CanvasSelect>
               </div>
 
               {/* Temperature */}
               <div className="flex flex-col gap-0.5">
-                <label className="text-[11px] text-neutral-400">
-                  Temperature: {(nodeData.temperature ?? 0.7).toFixed(2)}
+                <label className="text-[11px] text-neutral-400">{tc("Temperature:")}{(nodeData.temperature ?? 0.7).toFixed(2)}
                 </label>
-                <input
+                <CanvasInput
                   type="range"
                   min="0"
                   max={provider === "anthropic" ? "1" : "2"}
@@ -199,10 +204,9 @@ export function LLMGenerateNode({ id, data, selected }: NodeProps<LLMGenerateNod
 
               {/* Max Tokens */}
               <div className="flex flex-col gap-0.5">
-                <label className="text-[11px] text-neutral-400">
-                  Max Tokens: {(nodeData.maxTokens || 2048).toLocaleString()}
+                <label className="text-[11px] text-neutral-400">{tc("Max Tokens:")}{(nodeData.maxTokens || 2048).toLocaleString()}
                 </label>
-                <input
+                <CanvasInput
                   type="range"
                   min="256"
                   max="16384"
@@ -227,16 +231,15 @@ export function LLMGenerateNode({ id, data, selected }: NodeProps<LLMGenerateNod
               <div className="space-y-1.5 max-w-[280px]">
                 {/* Read-only model display */}
                 <div className="flex items-center gap-2">
-                  <label className="text-[11px] text-neutral-400 shrink-0">Model</label>
+                  <label className="text-[11px] text-neutral-400 shrink-0">{tc("Model")}</label>
                   <span className="text-[11px] text-neutral-200 truncate">{nodeData.fallbackModel!.displayName}</span>
                 </div>
 
                 {/* Temperature */}
                 <div className="flex flex-col gap-0.5">
-                  <label className="text-[11px] text-neutral-400">
-                    Temperature: {fbTemp.toFixed(2)}
+                  <label className="text-[11px] text-neutral-400">{tc("Temperature:")}{fbTemp.toFixed(2)}
                   </label>
-                  <input
+                  <CanvasInput
                     type="range"
                     min="0"
                     max={isAnthropicFb ? "1" : "2"}
@@ -249,10 +252,9 @@ export function LLMGenerateNode({ id, data, selected }: NodeProps<LLMGenerateNod
 
                 {/* Max Tokens */}
                 <div className="flex flex-col gap-0.5">
-                  <label className="text-[11px] text-neutral-400">
-                    Max Tokens: {fbMaxTokens.toLocaleString()}
+                  <label className="text-[11px] text-neutral-400">{tc("Max Tokens:")}{fbMaxTokens.toLocaleString()}
                   </label>
-                  <input
+                  <CanvasInput
                     type="range"
                     min="256"
                     max="16384"
@@ -276,7 +278,7 @@ export function LLMGenerateNode({ id, data, selected }: NodeProps<LLMGenerateNod
         style={{ top: "35%" }}
         data-handletype="image"
       />
-      <HandleLabel label="Image" side="target" color="var(--handle-color-image)" top="calc(35% - 18px)" visible={showLabels} />
+      <HandleLabel label={tc("Image")} side="target" color="var(--handle-color-image)" top="calc(35% - 18px)" visible={showLabels} />
       {/* Text input */}
       <Handle
         type="target"
@@ -285,7 +287,7 @@ export function LLMGenerateNode({ id, data, selected }: NodeProps<LLMGenerateNod
         style={{ top: "65%" }}
         data-handletype="text"
       />
-      <HandleLabel label="Prompt" side="target" color="var(--handle-color-text)" top="calc(65% - 18px)" visible={showLabels} />
+      <HandleLabel label={tc("Prompt")} side="target" color="var(--handle-color-text)" top="calc(65% - 18px)" visible={showLabels} />
       {/* Text output */}
       <Handle
         type="source"
@@ -293,7 +295,7 @@ export function LLMGenerateNode({ id, data, selected }: NodeProps<LLMGenerateNod
         id="text"
         data-handletype="text"
       />
-      <HandleLabel label="Text" side="source" color="var(--handle-color-text)" visible={showLabels} />
+      <HandleLabel label={tc("Text")} side="source" color="var(--handle-color-text)" visible={showLabels} />
 
       <div className="relative w-full h-full min-h-0 overflow-hidden rounded-lg">
         {nodeData.status === "loading" ? (
@@ -329,7 +331,7 @@ export function LLMGenerateNode({ id, data, selected }: NodeProps<LLMGenerateNod
             >
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <span className="text-white text-xs font-medium">Generation failed</span>
+            <span className="text-white text-xs font-medium">{tc("Generation failed")}</span>
             {nodeData.error && (
               <span className="text-red-200 text-[10px] text-center px-3 mt-1 line-clamp-3">{nodeData.error}</span>
             )}
@@ -340,9 +342,7 @@ export function LLMGenerateNode({ id, data, selected }: NodeProps<LLMGenerateNod
               <div
                 className="mb-1 inline-block px-1.5 py-0.5 rounded bg-emerald-900/70 text-emerald-300 text-[9px] font-medium"
                 title={`Primary failed: ${nodeData.__primaryError ?? "unknown"}\nUsed fallback: ${nodeData.__fallbackModelUsed ?? ""}`}
-              >
-                Fallback used
-              </div>
+              >{tc("Fallback used")}</div>
             )}
             <p className="text-[10px] text-neutral-300 whitespace-pre-wrap break-words">
               {nodeData.outputText}
@@ -351,7 +351,7 @@ export function LLMGenerateNode({ id, data, selected }: NodeProps<LLMGenerateNod
               <button
                 onClick={handleCopyOutput}
                 className={`nodrag nopan w-5 h-5 ${copied ? "bg-green-600/80" : "bg-neutral-900/80 hover:bg-neutral-700/80"} rounded flex items-center justify-center text-neutral-400 hover:text-white transition-colors`}
-                title={copied ? "Copied!" : "Copy to clipboard"}
+                title={copied ? tc("Copied!") : tc("Copy to clipboard")}
               >
                 {copied ? (
                   <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -367,7 +367,7 @@ export function LLMGenerateNode({ id, data, selected }: NodeProps<LLMGenerateNod
                 onClick={handleRegenerate}
                 disabled={isRunning}
                 className="nodrag nopan w-5 h-5 bg-neutral-900/80 hover:bg-blue-600/80 disabled:opacity-50 disabled:cursor-not-allowed rounded flex items-center justify-center text-neutral-400 hover:text-white transition-colors"
-                title="Regenerate"
+                title={tc("Regenerate")}
               >
                 <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -376,7 +376,7 @@ export function LLMGenerateNode({ id, data, selected }: NodeProps<LLMGenerateNod
               <button
                 onClick={handleClearOutput}
                 className="nodrag nopan w-5 h-5 bg-neutral-900/80 hover:bg-red-600/80 rounded flex items-center justify-center text-neutral-400 hover:text-white transition-colors"
-                title="Clear output"
+                title={tc("Clear output")}
               >
                 <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -386,9 +386,7 @@ export function LLMGenerateNode({ id, data, selected }: NodeProps<LLMGenerateNod
           </div>
         ) : (
           <div className="w-full h-full bg-neutral-900/40 flex items-center justify-center">
-            <span className="text-neutral-500 text-[10px]">
-              Run to generate
-            </span>
+            <span className="text-neutral-500 text-[10px]">{tc("Run to generate")}</span>
           </div>
         )}
       </div>

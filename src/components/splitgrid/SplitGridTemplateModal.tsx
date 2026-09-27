@@ -1,5 +1,7 @@
 "use client";
 
+import { useCanvasTranslation } from "../../leesfield/localization";
+
 /**
  * Split Grid cell template editor — a mini node graph in a modal.
  *
@@ -28,29 +30,23 @@ import {
   type FinalConnectionState,
   type NodeTypes,
 } from "@xyflow/react";
-import { useWorkflowStore } from "@/store/workflowStore";
-import { useWheelPanZoom } from "@/hooks/useWheelPanZoom";
-import type {
+import {
+  CanvasNavigationSettings,
   LLMGenerateNodeData,
   NanoBananaNodeData,
   NodeType,
   SplitGridNodeData,
   SplitGridTemplate,
-} from "@/types";
-import { createDefaultNodeData, defaultNodeDimensions } from "@/store/utils/nodeDefaults";
-import {
+  GEMINI_IMAGE_MODELS,
   clampGridDimension,
   createClassicSplitGridTemplate,
+  createDefaultNodeData,
   createDefaultSplitGridTemplate,
+  defaultNodeDimensions,
   getSplitGridTemplate,
-} from "@/store/utils/splitGridTemplate";
-import {
-  RouterRail,
-  RouterWires,
-  isInRailDropZone,
-  type RouterWire,
-  type RailSize,
-} from "./RouterRail";
+  useWheelPanZoom,
+  useWorkflowStore,
+} from "../../leesfield/upstream-node-host";
 import {
   getTemplateEntry,
   getTemplateNodeIcon,
@@ -65,7 +61,9 @@ import {
   type TemplateNodeData,
   type TemplateRFNode,
 } from "./TemplateNodes";
-import { GEMINI_IMAGE_MODELS } from "@/types";
+
+type RouterWire = { source: string; sourceHandle: string };
+type RailSize = { width: number; height: number };
 
 const nodeTypes: NodeTypes = {
   splitGridTemplateNode: SplitGridTemplateNode,
@@ -96,42 +94,10 @@ function edgeStyleFor(sourceHandle: string | null | undefined): React.CSSPropert
  * Snapshot of the user's sticky generate defaults — a template generate node
  * starts from the same settings a Generate Image node gets on the main canvas.
  */
-function seedGenerateOverrides(): Record<string, unknown> {
-  const defaults = createDefaultNodeData("nanoBanana") as NanoBananaNodeData;
-  const seed: Record<string, unknown> = {
-    model: defaults.model,
-    selectedModel:
-      defaults.selectedModel ?? {
-        provider: "gemini",
-        modelId: defaults.model,
-        displayName:
-          GEMINI_IMAGE_MODELS.find((m) => m.value === defaults.model)?.label || defaults.model,
-      },
-    aspectRatio: defaults.aspectRatio,
-    resolution: defaults.resolution,
-    useGoogleSearch: defaults.useGoogleSearch,
-    useImageSearch: defaults.useImageSearch,
-  };
-  if (defaults.parameters && Object.keys(defaults.parameters).length > 0) {
-    seed.parameters = defaults.parameters;
-  }
-  return seed;
-}
-
-/** LLM template nodes start from the same defaults as a main-canvas LLM node */
-function seedLlmOverrides(): Record<string, unknown> {
-  const defaults = createDefaultNodeData("llmGenerate") as LLMGenerateNodeData;
-  return {
-    provider: defaults.provider,
-    model: defaults.model,
-    temperature: defaults.temperature,
-    maxTokens: defaults.maxTokens,
-  };
-}
+function seedGenerateOverrides(): Record<string, unknown> { return { selectedModel: null, parameters: {} }; }
 
 function seedOverridesFor(type: NodeType): Record<string, unknown> {
   if (type === "nanoBanana") return seedGenerateOverrides();
-  if (type === "llmGenerate") return seedLlmOverrides();
   return {};
 }
 
@@ -264,6 +230,7 @@ function TemplateConnectionMenu({
   onSelect: (type: NodeType) => void;
   onClose: () => void;
 }) {
+  const tc = useCanvasTranslation();
   const menuRef = useRef<HTMLDivElement>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
 
@@ -312,9 +279,7 @@ function TemplateConnectionMenu({
       }}
     >
       <div className="px-2 py-1.5 border-b border-neutral-700">
-        <span className="text-[10px] text-neutral-400 uppercase tracking-wide">
-          Add {menu.fromHandleId} node
-        </span>
+        <span className="text-[10px] text-neutral-400 uppercase tracking-wide">{tc("Add")}{menu.fromHandleId}{tc("node")}</span>
       </div>
       <div className="py-1">
         {options.map((option, index) => (
@@ -344,8 +309,12 @@ interface SplitGridTemplateModalProps {
 }
 
 function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTemplateModalProps) {
+  const tc = useCanvasTranslation();
   const materializeSplitGridCells = useWorkflowStore((state) => state.materializeSplitGridCells);
   const isRunning = useWorkflowStore((state) => state.isRunning);
+  const writable = useWorkflowStore((state) => state.writable) !== false;
+  const [applyError, setApplyError] = useState<string | null>(null);
+  const [replaceMessage, setReplaceMessage] = useState<string | null>(null);
   const incrementModalCount = useWorkflowStore((state) => state.incrementModalCount);
   const decrementModalCount = useWorkflowStore((state) => state.decrementModalCount);
   const canvasNavigationSettings = useWorkflowStore((state) => state.canvasNavigationSettings);
@@ -383,8 +352,17 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
   const baseNodeId = initialTemplate.baseNodeId;
   const { fitView, screenToFlowPosition } = useReactFlow();
 
+  const refitFrame = useRef<number | null>(null);
+  useEffect(() => {
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    return () => {
+      if (refitFrame.current !== null) cancelAnimationFrame(refitFrame.current);
+      if (previous?.isConnected) previous.focus(); else document.querySelector<HTMLElement>('[data-node-banana-component="WorkflowCanvas"]')?.focus();
+    };
+  }, []);
   const refitSoon = useCallback(() => {
-    requestAnimationFrame(() => {
+    if (refitFrame.current !== null) cancelAnimationFrame(refitFrame.current);
+    refitFrame.current = requestAnimationFrame(() => {
       fitView({ padding: 0.25, maxZoom: 1, duration: 200 });
     });
   }, [fitView]);
@@ -533,7 +511,9 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
-      if (edgeToolbar) {
+      if (replaceMessage) {
+        setReplaceMessage(null);
+      } else if (edgeToolbar) {
         setEdgeToolbar(null);
       } else if (dropMenu) {
         setDropMenu(null);
@@ -545,7 +525,7 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [edgeToolbar, dropMenu, showDiscardConfirm, requestClose]);
+  }, [edgeToolbar, dropMenu, showDiscardConfirm, replaceMessage, requestClose]);
 
   const setOverrides = useCallback(
     (id: string, overrides: Record<string, unknown>) => {
@@ -654,16 +634,6 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
       if (!fromHandle?.id || !fromNode) return;
       const point = "changedTouches" in event ? event.changedTouches[0] : event;
 
-      // Drop an output onto the router rail → wire it to the shared router
-      const rect = canvasWrapperRef.current?.getBoundingClientRect();
-      if (rect && fromHandle.type === "source") {
-        const wrapperPoint = { x: point.clientX - rect.left, y: point.clientY - rect.top };
-        if (isInRailDropZone(wrapperPoint, wrapperSize, routerWires)) {
-          addRouterWire(fromNode.id, fromHandle.id);
-          return;
-        }
-      }
-
       const targetElement = event.target as HTMLElement | null;
       if (!targetElement?.closest(".react-flow__pane")) return;
       setDropMenu({
@@ -764,16 +734,17 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
     return list;
   }, [rfNodes, rfEdges, routerWires]);
 
-  const handleApply = useCallback(() => {
-    if (isRunning) return;
-    // Single store call: saving the template and rebuilding the cells share
-    // one undo checkpoint, so one Cmd+Z reverts the whole apply
-    materializeSplitGridCells(nodeId, {
-      force: true,
-      template: serializeTemplate(baseNodeId, rfNodes, rfEdges, routerWires),
-    });
-    onClose();
-  }, [isRunning, baseNodeId, rfNodes, rfEdges, routerWires, nodeId, materializeSplitGridCells, onClose]);
+  const handleApply = useCallback((replaceConfirmed = false) => {
+    if (isRunning || !writable) return;
+    setApplyError(null);
+    try {
+      materializeSplitGridCells(nodeId, { template: serializeTemplate(baseNodeId, rfNodes, rfEdges, []), replaceConfirmed });
+      onClose();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to apply cell template.";
+      if (message.startsWith("Replace ")) setReplaceMessage(message); else setApplyError(message);
+    }
+  }, [isRunning, writable, baseNodeId, rfNodes, rfEdges, nodeId, materializeSplitGridCells, onClose]);
 
   return createPortal(
     <div
@@ -792,25 +763,19 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
         backdropPointerDownRef.current = false;
       }}
     >
-      <div className="relative w-[min(1080px,94vw)] h-[min(720px,88vh)] bg-neutral-800 rounded-xl border border-neutral-700 shadow-2xl overflow-clip flex flex-col">
+      <div role="dialog" aria-modal="true" aria-label={tc("Cell template")} className="relative w-[min(1080px,94vw)] h-[min(720px,88vh)] bg-neutral-800 rounded-xl border border-neutral-700 shadow-2xl overflow-clip flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between gap-4 px-5 py-3.5 border-b border-neutral-700/60 shrink-0">
+        <div className="flex max-sm:flex-wrap items-center justify-between gap-4 px-5 py-3.5 border-b border-neutral-700/60 shrink-0">
           <div className="min-w-0">
-            <h2 className="text-base font-semibold text-neutral-100">Cell Node Set</h2>
-            <p className="text-xs text-neutral-500 mt-0.5 truncate">
-              These nodes are created for every split image and grouped per cell
-            </p>
+            <h2 className="text-base font-semibold text-neutral-100">{tc("Cell Node Set")}</h2>
+            <p className="text-xs text-neutral-500 mt-0.5 truncate">{tc("These nodes are created for every split image and grouped per cell")}</p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider">
-              Presets
-            </span>
+            <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider">{tc("Presets")}</span>
             <button
               onClick={() => applyPreset(createDefaultSplitGridTemplate())}
               className="px-2.5 py-1.5 text-xs text-neutral-400 hover:text-neutral-100 bg-neutral-900 border border-neutral-700 hover:border-neutral-500 rounded-md transition-colors"
-            >
-              Image only
-            </button>
+            >{tc("Image only")}</button>
             <button
               onClick={() =>
                 applyPreset(
@@ -818,14 +783,12 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
                 )
               }
               className="px-2.5 py-1.5 text-xs text-neutral-400 hover:text-neutral-100 bg-neutral-900 border border-neutral-700 hover:border-neutral-500 rounded-md transition-colors"
-            >
-              Prompt + Generate
-            </button>
+            >{tc("Prompt + Generate")}</button>
             <div className="w-px h-6 bg-neutral-700 mx-1" />
             <button
               onClick={requestClose}
               className="p-1.5 text-neutral-400 hover:text-neutral-100 hover:bg-neutral-700 rounded transition-colors"
-              aria-label="Close"
+              aria-label={tc("Close")}
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -838,7 +801,7 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
         <div ref={canvasWrapperRef} className="flex-1 min-h-0 relative bg-neutral-900">
           {/* Router wires render BEHIND the canvas so nodes occlude them, like
               normal edges (the pane is transparent, so they show in the gaps) */}
-          <RouterWires wires={routerWires} nodes={rfNodes} size={wrapperSize} />
+
 
           <div className="absolute inset-0">
           <TemplateEditorContext.Provider value={editorContext}>
@@ -872,12 +835,7 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
           </div>
 
           {/* Fixed downstream-router rail + invisible wire click targets (on top) */}
-          <RouterRail
-            wires={routerWires}
-            nodes={rfNodes}
-            size={wrapperSize}
-            onDisconnectType={disconnectRouterType}
-          />
+
 
           {/* Connection drop menu */}
           {dropMenu && (
@@ -900,8 +858,8 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
               <button
                 onClick={handleToolbarDelete}
                 className="p-1.5 rounded hover:bg-neutral-700 text-neutral-400 hover:text-red-400 transition-colors"
-                title="Delete"
-                aria-label="Delete connection"
+                title={tc("Delete")}
+                aria-label={tc("Delete connection")}
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                   <path
@@ -915,11 +873,12 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
           )}
         </div>
 
+        {applyError && <p role="alert" className="px-5 py-2 text-xs text-red-300">{applyError}</p>}
         {/* Footer */}
         <div className="flex items-center justify-between gap-4 px-5 py-3.5 border-t border-neutral-700/50 shrink-0">
           <div className="text-xs text-neutral-500 min-w-0">
             <span>
-              {perCellNodeCount} node{perCellNodeCount === 1 ? "" : "s"} per cell · {nodeData.gridRows}×{nodeData.gridCols} grid → {cellCount} group{cellCount === 1 ? "" : "s"}
+              {perCellNodeCount}{tc("node")}{perCellNodeCount === 1 ? "" : "s"}{tc("per cell ·")}{nodeData.gridRows}×{nodeData.gridCols}{tc("grid →")}{cellCount}{tc("group")}{cellCount === 1 ? "" : "s"}
             </span>
             {warnings.map((warning) => (
               <span key={warning} className="ml-3 text-amber-400">
@@ -931,41 +890,42 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
             <button
               onClick={requestClose}
               className="px-4 py-2 text-sm text-neutral-400 hover:text-neutral-100 transition-colors"
-            >
-              Cancel
-            </button>
+            >{tc("Cancel")}</button>
             <button
-              onClick={handleApply}
-              disabled={isRunning}
-              title={isRunning ? "Wait for the current run to finish" : undefined}
+              onClick={() => handleApply()}
+              disabled={isRunning || !writable}
+              title={isRunning ? tc("Wait for the current run to finish") : undefined}
               className="px-4 py-2 text-sm bg-white text-neutral-900 rounded-lg hover:bg-neutral-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              Apply to {cellCount} cell{cellCount === 1 ? "" : "s"}
+            >{tc("Apply to")}{cellCount}{tc("cell")}{cellCount === 1 ? "" : "s"}
             </button>
           </div>
         </div>
 
+        {replaceMessage && <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/60" role="alertdialog" aria-label={tc("Replace existing cells?")}>
+          <div className="bg-neutral-800 border border-neutral-600 rounded-lg p-5 mx-4 max-w-sm shadow-xl">
+            <h3 className="text-sm font-semibold text-neutral-100">{tc("Replace existing cells?")}</h3>
+            <p className="text-xs text-neutral-400 mt-1">{replaceMessage}</p>
+            <div className="flex justify-end gap-2 mt-4">
+              <button className="px-3 py-1.5 text-xs text-neutral-300" onClick={() => setReplaceMessage(null)}>{tc("Keep existing cells")}</button>
+              <button className="px-3 py-1.5 text-xs text-red-400" onClick={() => handleApply(true)}>{tc("Replace cells")}</button>
+            </div>
+          </div>
+        </div>}
         {/* Discard-changes confirmation */}
         {showDiscardConfirm && (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/60">
             <div className="bg-neutral-800 border border-neutral-600 rounded-lg p-5 mx-4 max-w-sm shadow-xl">
-              <h3 className="text-sm font-semibold text-neutral-100">Discard changes?</h3>
-              <p className="text-xs text-neutral-400 mt-1">
-                Your edits to the cell node set haven&apos;t been applied.
-              </p>
+              <h3 className="text-sm font-semibold text-neutral-100">{tc("Discard changes?")}</h3>
+              <p className="text-xs text-neutral-400 mt-1">{tc("Your edits to the cell node set haven&apos;t been applied.")}</p>
               <div className="flex justify-end gap-2 mt-4">
                 <button
                   onClick={() => setShowDiscardConfirm(false)}
                   className="px-3 py-1.5 text-xs font-medium text-neutral-300 bg-neutral-700 hover:bg-neutral-600 rounded transition-colors"
-                >
-                  Keep editing
-                </button>
+                >{tc("Keep editing")}</button>
                 <button
                   onClick={onClose}
                   className="px-3 py-1.5 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-900/30 rounded transition-colors"
-                >
-                  Discard
-                </button>
+                >{tc("Discard")}</button>
               </div>
             </div>
           </div>

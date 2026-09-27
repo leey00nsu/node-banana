@@ -1,5 +1,7 @@
 "use client";
 
+import { useCanvasTranslation } from "../../leesfield/localization";
+
 import { useState, useEffect, useCallback } from "react";
 import { WorkflowFile } from "@/store/workflowStore";
 import { QuickstartBackButton } from "./QuickstartBackButton";
@@ -43,6 +45,7 @@ export function WorkflowBrowserView({
   onWorkflowLoaded,
   onClose,
 }: WorkflowBrowserViewProps) {
+  const tc = useCanvasTranslation();
   const [defaultDir, setDefaultDir] = useState<string | null>(null);
   const [workflows, setWorkflows] = useState<WorkflowListEntry[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -188,9 +191,7 @@ export function WorkflowBrowserView({
                 />
               </svg>
             </div>
-            <h2 id="workflow-browser-title" className="text-lg font-medium text-neutral-200">
-              Your Workflows
-            </h2>
+            <h2 id="workflow-browser-title" className="text-lg font-medium text-neutral-200">{tc("Your Workflows")}</h2>
           </div>
           <p className="text-sm text-neutral-500 max-w-xs text-center">
             Choose the folder that contains your workflow projects. You can change this later.
@@ -217,9 +218,7 @@ export function WorkflowBrowserView({
           </div>
         )}
         <div className="flex items-baseline justify-between gap-3">
-          <h2 className="text-lg font-medium text-neutral-200">
-            Your Workflows
-          </h2>
+          <h2 className="text-lg font-medium text-neutral-200">{tc("Your Workflows")}</h2>
           <span className="text-xs text-neutral-600 tabular-nums flex-shrink-0">
             {workflows.length} project{workflows.length !== 1 ? "s" : ""}
           </span>

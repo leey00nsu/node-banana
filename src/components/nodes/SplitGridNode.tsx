@@ -1,25 +1,29 @@
 "use client";
 
+import { useCanvasTranslation } from "../../leesfield/localization";
+import { Handle } from "../../leesfield/port-handle";
+
 import { useCallback, useState, useEffect, useMemo, useRef } from "react";
-import { Handle, Position, NodeProps, Node } from "@xyflow/react";
+import { Position, NodeProps, Node } from "@xyflow/react";
 import { BaseNode } from "./BaseNode";
-import { useWorkflowStore } from "@/store/workflowStore";
-import { SplitGridNodeData } from "@/types";
+import { HandleLabel } from "./HandleLabel";
 import { SplitGridTemplateModal } from "../splitgrid/SplitGridTemplateModal";
 import {
+  MAX_GRID_DIMENSION,
+  MIN_GRID_DIMENSION,
+  MIN_SLICE_GAP,
+  SplitGridNodeData,
   clampGridDimension,
   getSplitGridCells,
   getSplitGridTemplate,
+  gridFractions,
   needsMaterialization,
   resolveGridOffsets,
-  gridFractions,
-  MIN_GRID_DIMENSION,
-  MAX_GRID_DIMENSION,
-  MIN_SLICE_GAP,
-} from "@/store/utils/splitGridTemplate";
-import { useAdaptiveImageSrc } from "@/hooks/useAdaptiveImageSrc";
-import { useShowHandleLabels } from "@/hooks/useShowHandleLabels";
-import { HandleLabel } from "./HandleLabel";
+  useAdaptiveImageSrc,
+  expandRegistry,
+  useShowHandleLabels,
+  useWorkflowStore,
+} from "../../leesfield/upstream-node-host";
 
 type SplitGridNodeType = Node<SplitGridNodeData, "splitGrid">;
 
@@ -87,6 +91,7 @@ function GridDimField({ label, value, onChange, disabled }: GridDimFieldProps) {
 }
 
 export function SplitGridNode({ id, data, selected }: NodeProps<SplitGridNodeType>) {
+  const tc = useCanvasTranslation();
   const nodeData = data;
   const adaptiveSourceImage = useAdaptiveImageSrc(nodeData.sourceImage, id);
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
@@ -95,8 +100,18 @@ export function SplitGridNode({ id, data, selected }: NodeProps<SplitGridNodeTyp
   const getConnectedInputs = useWorkflowStore((state) => state.getConnectedInputs);
   const edges = useWorkflowStore((state) => state.edges);
   const nodes = useWorkflowStore((state) => state.nodes);
+  const templateEditingDisabled = nodeData.disableSplitGridTemplateEditor === true;
   const [showEditor, setShowEditor] = useState(false);
   const showLabels = useShowHandleLabels(selected);
+
+  useEffect(() => {
+    if (templateEditingDisabled) {
+      expandRegistry.unregister(id);
+      return;
+    }
+    expandRegistry.register(id, () => setShowEditor(true));
+    return () => expandRegistry.unregister(id);
+  }, [id, templateEditingDisabled]);
 
   const gridRows = clampGridDimension(nodeData.gridRows);
   const gridCols = clampGridDimension(nodeData.gridCols);
@@ -226,6 +241,7 @@ export function SplitGridNode({ id, data, selected }: NodeProps<SplitGridNodeTyp
   const handleColsChange = useCallback(
     (value: number) => {
       if (value === gridCols) return;
+      // Column count changed: custom column lines no longer fit — reset to uniform.
       updateNodeData(id, { gridCols: value, colOffsets: undefined });
     },
     [id, updateNodeData, gridCols]
@@ -235,8 +251,13 @@ export function SplitGridNode({ id, data, selected }: NodeProps<SplitGridNodeTyp
     regenerateNode(id);
   }, [id, regenerateNode]);
 
+  const outputImages = (Array.isArray(nodeData.outputImages) ? nodeData.outputImages : []) as string[];
   const statusText = nodeData.status === "error"
     ? nodeData.error || "Error"
+    : templateEditingDisabled && !nodeData.materializesSplitCells
+      ? outputImages.length > 0
+        ? `${outputImages.length} saved images — Images output → Gallery / GIF`
+        : "Split saves images to History and the Images output"
     : cells.length > 0
       ? cellsAreStale
         ? "Cells out of date — Split rebuilds"
@@ -260,7 +281,7 @@ export function SplitGridNode({ id, data, selected }: NodeProps<SplitGridNodeTyp
           data-handletype="image"
           style={{ zIndex: 10 }}
         />
-        <HandleLabel label="Image" side="target" color="var(--handle-color-image)" visible={showLabels} />
+        <HandleLabel label={tc("Image")} side="target" color="var(--handle-color-image)" visible={showLabels} />
 
         {/* Reference output handle for visual links to cell nodes */}
         <Handle
@@ -271,30 +292,29 @@ export function SplitGridNode({ id, data, selected }: NodeProps<SplitGridNodeTyp
           className="!bg-gray-500"
           style={{ zIndex: 10 }}
         />
-        <HandleLabel label="Ref" side="source" color="#6b7280" visible={showLabels} />
+        <HandleLabel label={templateEditingDisabled && !nodeData.materializesSplitCells ? tc("Images") : tc("Ref")} side="source" color="#6b7280" visible={showLabels} />
 
         <div className="flex flex-col gap-2 pt-3 h-full min-h-0">
           {/* Rows / Columns fields */}
           <div className="grid grid-cols-2 gap-2">
-            <GridDimField label="Rows" value={gridRows} onChange={handleRowsChange} disabled={isRunning} />
-            <GridDimField label="Columns" value={gridCols} onChange={handleColsChange} disabled={isRunning} />
+            <GridDimField label={tc("Rows")} value={gridRows} onChange={handleRowsChange} disabled={isRunning} />
+            <GridDimField label={tc("Columns")} value={gridCols} onChange={handleColsChange} disabled={isRunning} />
           </div>
 
-          {/* Cell node set editor */}
-          <button
+          {/* Cell templates are committed atomically through the hosted graph adapter. */}
+          {!templateEditingDisabled && <button
             onClick={() => setShowEditor(true)}
             disabled={isRunning}
-            title={isRunning ? "Wait for the current run to finish" : undefined}
+            title={isRunning ? tc("Wait for the current run to finish") : undefined}
             className="nodrag nopan w-full flex items-center gap-2 px-2.5 py-2 bg-neutral-900 border border-neutral-700 hover:border-neutral-500 rounded-md text-neutral-300 hover:text-neutral-100 disabled:text-neutral-600 disabled:hover:border-neutral-700 disabled:cursor-not-allowed transition-colors"
           >
             <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 16.875h3.375m0 0h3.375m-3.375 0V13.5m0 3.375v3.375M6 10.5h2.25a2.25 2.25 0 002.25-2.25V6a2.25 2.25 0 00-2.25-2.25H6A2.25 2.25 0 003.75 6v2.25A2.25 2.25 0 006 10.5zm0 9.75h2.25A2.25 2.25 0 0010.5 18v-2.25a2.25 2.25 0 00-2.25-2.25H6a2.25 2.25 0 00-2.25 2.25V18A2.25 2.25 0 006 20.25zm9.75-9.75H18a2.25 2.25 0 002.25-2.25V6A2.25 2.25 0 0018 3.75h-2.25A2.25 2.25 0 0013.5 6v2.25a2.25 2.25 0 002.25 2.25z" />
             </svg>
-            <span className="text-xs font-medium">Cell nodes</span>
+            <span className="text-xs font-medium">{tc("Cell nodes")}</span>
             <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-neutral-800 border border-neutral-700 text-neutral-400">
-              {templateNodeCount} / cell
-            </span>
-          </button>
+              {templateNodeCount}{tc("/ cell")}</span>
+          </button>}
 
           {/* Preview with grid overlay */}
           <div
@@ -313,7 +333,7 @@ export function SplitGridNode({ id, data, selected }: NodeProps<SplitGridNodeTyp
               >
                 <img
                   src={adaptiveSourceImage ?? undefined}
-                  alt="Source grid"
+                  alt={tc("Source grid")}
                   className="w-full h-full object-contain block select-none"
                   draggable={false}
                   onLoad={(e) => {
@@ -389,7 +409,7 @@ export function SplitGridNode({ id, data, selected }: NodeProps<SplitGridNodeTyp
                 <svg className="w-5 h-5 text-neutral-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
                 </svg>
-                <span className="text-neutral-500 text-[10px]">Connect image</span>
+                <span className="text-neutral-500 text-[10px]">{tc("Connect image")}</span>
               </div>
             )}
             {nodeData.status === "loading" && (
@@ -403,7 +423,15 @@ export function SplitGridNode({ id, data, selected }: NodeProps<SplitGridNodeTyp
           </div>
 
           {/* Status + split */}
-          <div className="flex items-center justify-between gap-2">
+          {templateEditingDisabled && !nodeData.materializesSplitCells && outputImages.length > 0 && (
+            <div aria-label={tc("Split results")} className="nodrag nopan nowheel flex shrink-0 gap-1 overflow-x-auto">
+              {outputImages.map((src, index) => (
+                <img key={src} src={src} alt={`Split cell ${index + 1}`} draggable={false}
+                  className="h-12 w-12 shrink-0 rounded object-contain bg-neutral-900" />
+              ))}
+            </div>
+          )}
+          <div className="flex shrink-0 items-center justify-between gap-2">
             <span
               className={`text-[10px] truncate ${
                 nodeData.status === "error"
@@ -420,16 +448,15 @@ export function SplitGridNode({ id, data, selected }: NodeProps<SplitGridNodeTyp
               onClick={handleSplit}
               disabled={isRunning || !nodeData.sourceImage}
               className="nodrag nopan shrink-0 px-2.5 py-1 text-[10px] border border-white hover:bg-white hover:text-neutral-900 disabled:border-neutral-600 disabled:text-neutral-600 disabled:cursor-not-allowed text-white rounded transition-colors"
-              title={!nodeData.sourceImage ? "Connect an image first" : `Split into ${gridRows}×${gridCols}`}
-            >
-              Split {gridRows}×{gridCols}
+              title={!nodeData.sourceImage ? tc("Connect an image first") : `Split into ${gridRows}×${gridCols}`}
+            >{tc("Split")}{gridRows}×{gridCols}
             </button>
           </div>
         </div>
       </BaseNode>
 
       {/* Cell template editor */}
-      {showEditor && (
+      {showEditor && !templateEditingDisabled && (
         <SplitGridTemplateModal
           nodeId={id}
           nodeData={nodeData}

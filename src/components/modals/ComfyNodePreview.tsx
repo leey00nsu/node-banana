@@ -1,5 +1,7 @@
 "use client";
 
+import { useCanvasTranslation } from "../../leesfield/localization";
+
 import React, { useMemo, useState } from "react";
 
 import { ComfyWordmark } from "@/components/icons/ComfyWordmark";
@@ -50,6 +52,7 @@ export function ComfyNodePreview({
   params,
   outputs,
 }: ComfyNodePreviewProps) {
+  const tc = useCanvasTranslation();
   // Seeded from the defaults, exactly as the node seeds itself on attach —
   // otherwise every dropdown reads "Default (…)", which is a state the real
   // node is never in. Edits are kept but not saved: nothing typed in a preview
@@ -90,12 +93,12 @@ export function ComfyNodePreview({
                   {source === "blueprint" ? "Blueprint" : "App workflow"}
                 </p>
                 <p className="text-[9px] text-neutral-500 truncate">
-                  {nodeCount} node{nodeCount === 1 ? "" : "s"}
+                  {nodeCount}{tc("node")}{nodeCount === 1 ? "" : "s"}
                 </p>
               </div>
             </div>
             <div className="h-[92px] rounded-md bg-neutral-900/60 flex items-center justify-center">
-              <span className="text-[10px] text-neutral-600">No output yet</span>
+              <span className="text-[10px] text-neutral-600">{tc("No output yet")}</span>
             </div>
           </div>
 
@@ -103,7 +106,7 @@ export function ComfyNodePreview({
               show would be a chevron. */}
           <div className="bg-[#2a2a2a] rounded-b-lg">
             <div className="w-full flex items-center justify-center gap-1 py-1 text-neutral-500">
-              <span className="text-[10px]">Settings</span>
+              <span className="text-[10px]">{tc("Settings")}</span>
               <svg
                 className="w-3 h-3 rotate-180"
                 viewBox="0 0 24 24"

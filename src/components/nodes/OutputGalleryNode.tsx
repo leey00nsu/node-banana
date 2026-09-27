@@ -1,19 +1,28 @@
 "use client";
 
+import { useCanvasTranslation } from "../../leesfield/localization";
+import { Handle } from "../../leesfield/port-handle";
+
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { Handle, Position, NodeProps, Node, useReactFlow } from "@xyflow/react";
+import { Position, NodeProps, Node, useReactFlow } from "@xyflow/react";
 import { BaseNode } from "./BaseNode";
-import { useWorkflowStore } from "@/store/workflowStore";
-import { OutputGalleryNodeData } from "@/types";
-import { useAdaptiveImageSrc } from "@/hooks/useAdaptiveImageSrc";
-import { useVideoBlobUrl } from "@/hooks/useVideoBlobUrl";
-import { defaultNodeDimensions } from "@/store/utils/nodeDefaults";
-import { downloadMedia as downloadMediaUtil } from "@/utils/downloadMedia";
-import { useShowHandleLabels } from "@/hooks/useShowHandleLabels";
 import { HandleLabel } from "./HandleLabel";
+import {
+  OutputGalleryNodeData,
+  defaultNodeDimensions,
+  useAdaptiveImageSrc,
+  useShowHandleLabels,
+  useVideoBlobUrl,
+  useWorkflowStore,
+} from "../../leesfield/upstream-node-host";
+import { downloadMedia as downloadMediaUtil } from "../../utils/downloadMedia";
 
-type MediaItem = { type: "image" | "video"; src: string };
+type MediaItem = { type: "image" | "video" | "audio"; src: string; assetId?: string | null };
+
+function mediaAssetId(refs: unknown, index: number) {
+  return Array.isArray(refs) && typeof refs[index] === "string" ? refs[index] : null;
+}
 
 function AdaptiveGalleryThumbnail({ src, alt, nodeId }: { src: string; alt: string; nodeId: string }) {
   const adaptiveSrc = useAdaptiveImageSrc(src, nodeId);
@@ -42,9 +51,12 @@ function LightboxVideo({ src }: { src: string }) {
 type OutputGalleryNodeType = Node<OutputGalleryNodeData, "outputGallery">;
 
 export function OutputGalleryNode({ id, data, selected }: NodeProps<OutputGalleryNodeType>) {
+  const tc = useCanvasTranslation();
   const nodeData = data;
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
   const addNode = useWorkflowStore((state) => state.addNode);
+  const onOutputGalleryRemove = useWorkflowStore((state) => state.onOutputGalleryRemove);
+  const onOutputGalleryExtract = useWorkflowStore((state) => state.onOutputGalleryExtract);
   const { getNodes, setNodes } = useReactFlow();
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const showLabels = useShowHandleLabels(selected);
@@ -52,11 +64,24 @@ export function OutputGalleryNode({ id, data, selected }: NodeProps<OutputGaller
   // Display stored media only — items are accumulated during workflow execution
   const displayMedia = useMemo(() => {
     const media: MediaItem[] = [
-      ...(nodeData.images || []).map((src): MediaItem => ({ type: "image", src })),
-      ...(nodeData.videos || []).map((src): MediaItem => ({ type: "video", src })),
+      ...(nodeData.images || []).map((src, index): MediaItem => ({
+        type: "image",
+        src,
+        assetId: mediaAssetId(nodeData.imageRefs, index),
+      })),
+      ...(nodeData.videos || []).map((src, index): MediaItem => ({
+        type: "video",
+        src,
+        assetId: mediaAssetId(nodeData.videoRefs, index),
+      })),
+      ...((nodeData.audios || []) as string[]).map((src, index): MediaItem => ({
+        type: "audio",
+        src,
+        assetId: mediaAssetId(nodeData.audioRefs, index),
+      })),
     ];
     return media;
-  }, [nodeData.images, nodeData.videos]);
+  }, [nodeData.audioRefs, nodeData.audios, nodeData.imageRefs, nodeData.images, nodeData.videoRefs, nodeData.videos]);
 
   // Extract poster-frame thumbnails for video tiles once, instead of mounting N
   // live <video> decoders. Data-URL video sources force Chrome to continuously
@@ -214,26 +239,39 @@ export function OutputGalleryNode({ id, data, selected }: NodeProps<OutputGaller
     // images.indexOf(item.src)) makes removal exact even when two items share a
     // src — duplicate outputs or empty-string placeholders — and keeps the
     // images/imageRefs (and videos/videoRefs) arrays positionally aligned.
-    const imageCount = nodeData.images?.length || 0;
-
-    if (item.type === "image") {
-      const images = [...(nodeData.images || [])];
-      const imageRefs = [...(nodeData.imageRefs || [])];
-      const imgIndex = index;
-      if (imgIndex >= 0 && imgIndex < images.length) {
-        images.splice(imgIndex, 1);
-        if (imgIndex < imageRefs.length) imageRefs.splice(imgIndex, 1);
-      }
-      updateNodeData(id, { images, imageRefs });
+    if (onOutputGalleryRemove) {
+      onOutputGalleryRemove({ nodeId: id, index, item });
     } else {
-      const videos = [...(nodeData.videos || [])];
-      const videoRefs = [...(nodeData.videoRefs || [])];
-      const vidIndex = index - imageCount;
-      if (vidIndex >= 0 && vidIndex < videos.length) {
-        videos.splice(vidIndex, 1);
-        if (vidIndex < videoRefs.length) videoRefs.splice(vidIndex, 1);
+      const imageCount = nodeData.images?.length || 0;
+
+      if (item.type === "image") {
+        const images = [...(nodeData.images || [])];
+        const imageRefs = [...(nodeData.imageRefs || [])];
+        const imgIndex = index;
+        if (imgIndex >= 0 && imgIndex < images.length) {
+          images.splice(imgIndex, 1);
+          if (imgIndex < imageRefs.length) imageRefs.splice(imgIndex, 1);
+        }
+        updateNodeData(id, { images, imageRefs });
+      } else if (item.type === "video") {
+        const videos = [...(nodeData.videos || [])];
+        const videoRefs = [...(nodeData.videoRefs || [])];
+        const vidIndex = index - imageCount;
+        if (vidIndex >= 0 && vidIndex < videos.length) {
+          videos.splice(vidIndex, 1);
+          if (vidIndex < videoRefs.length) videoRefs.splice(vidIndex, 1);
+        }
+        updateNodeData(id, { videos, videoRefs });
+      } else {
+        const audios = [...(nodeData.audios || [])];
+        const audioRefs = [...(nodeData.audioRefs || [])];
+        const audioIndex = index - imageCount - (nodeData.videos?.length || 0);
+        if (audioIndex >= 0 && audioIndex < audios.length) {
+          audios.splice(audioIndex, 1);
+          if (audioIndex < audioRefs.length) audioRefs.splice(audioIndex, 1);
+        }
+        updateNodeData(id, { audios, audioRefs });
       }
-      updateNodeData(id, { videos, videoRefs });
     }
 
     // Adjust lightbox after removal
@@ -245,9 +283,14 @@ export function OutputGalleryNode({ id, data, selected }: NodeProps<OutputGaller
         setLightboxIndex(newLength - 1);
       }
     }
-  }, [displayMedia, nodeData.images, nodeData.imageRefs, nodeData.videos, nodeData.videoRefs, updateNodeData, id, lightboxIndex]);
+  }, [displayMedia, nodeData.audios, nodeData.audioRefs, nodeData.images, nodeData.imageRefs, nodeData.videos, nodeData.videoRefs, onOutputGalleryRemove, updateNodeData, id, lightboxIndex]);
 
   const handleExtractToInputNodes = useCallback(() => {
+    if (onOutputGalleryExtract) {
+      onOutputGalleryExtract({ nodeId: id, items: displayMedia });
+      return;
+    }
+
     const galleryNode = getNodes().find((n) => n.id === id);
     if (!galleryNode) return;
 
@@ -259,6 +302,7 @@ export function OutputGalleryNode({ id, data, selected }: NodeProps<OutputGaller
     const newNodeIds: string[] = [];
     const images = nodeData.images || [];
     const videos = nodeData.videos || [];
+    const audios = nodeData.audios || [];
 
     // Reverse so oldest items (end of array) appear at top, newest at bottom
     const reversedImages = [...images].reverse();
@@ -276,6 +320,13 @@ export function OutputGalleryNode({ id, data, selected }: NodeProps<OutputGaller
       currentY += defaultNodeDimensions.videoInput.height + gap;
     }
 
+    const reversedAudios = [...audios].reverse();
+    for (let i = 0; i < reversedAudios.length; i++) {
+      const nodeId = addNode("audioInput", { x: startX, y: currentY }, { audioFile: reversedAudios[i], filename: `gallery-audio-${i + 1}.mp3` });
+      newNodeIds.push(nodeId);
+      currentY += defaultNodeDimensions.audioInput.height + gap;
+    }
+
     if (newNodeIds.length > 0) {
       setNodes((nodes) =>
         nodes.map((n) => ({
@@ -284,7 +335,7 @@ export function OutputGalleryNode({ id, data, selected }: NodeProps<OutputGaller
         }))
       );
     }
-  }, [id, nodeData.images, nodeData.videos, getNodes, addNode, setNodes]);
+  }, [id, displayMedia, nodeData.audios, nodeData.images, nodeData.videos, getNodes, addNode, setNodes, onOutputGalleryExtract]);
 
   // Keyboard navigation for lightbox
   useEffect(() => {
@@ -324,7 +375,7 @@ export function OutputGalleryNode({ id, data, selected }: NodeProps<OutputGaller
           data-handletype="image"
           style={{ top: "40%" }}
         />
-        <HandleLabel label="Image" side="target" color="rgb(59, 130, 246)" top="calc(40% - 18px)" visible={showLabels} />
+        <HandleLabel label={tc("Image")} side="target" color="rgb(59, 130, 246)" top="calc(40% - 18px)" visible={showLabels} />
 
         <Handle
           type="target"
@@ -333,31 +384,36 @@ export function OutputGalleryNode({ id, data, selected }: NodeProps<OutputGaller
           data-handletype="video"
           style={{ top: "60%" }}
         />
-        <HandleLabel label="Video" side="target" color="var(--handle-color-video)" top="calc(60% - 18px)" visible={showLabels} />
+        <HandleLabel label={tc("Video")} side="target" color="var(--handle-color-video)" top="calc(60% - 18px)" visible={showLabels} />
+
+        <Handle
+          type="target"
+          position={Position.Left}
+          id="audio"
+          data-handletype="audio"
+          style={{ top: "80%" }}
+        />
+        <HandleLabel label={tc("Audio")} side="target" color="var(--handle-color-audio)" top="calc(80% - 18px)" visible={showLabels} />
 
         {displayMedia.length > 0 && (
           <div className="flex items-center justify-between px-2 py-1">
             <span className="text-neutral-400 text-[10px]">
-              {displayMedia.length} {displayMedia.length === 1 ? "item" : "items"}
+              {displayMedia.length} {displayMedia.length === 1 ? tc("item") : tc("items")}
             </span>
             <button
               onClick={handleExtractToInputNodes}
               className="nodrag nopan flex items-center gap-1 px-1.5 py-0.5 text-[10px] text-neutral-400 hover:text-white hover:bg-neutral-700 rounded transition-colors"
-              title="Extract each item as an input node"
+              title={tc("Extract each item as an input node")}
             >
               <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-              </svg>
-              Extract
-            </button>
+              </svg>{tc("Extract")}</button>
           </div>
         )}
 
         {displayMedia.length === 0 ? (
           <div className="w-full flex-1 min-h-[200px] border border-dashed border-neutral-600 rounded flex items-center justify-center">
-            <span className="text-neutral-500 text-[10px] text-center px-4">
-              Connect image or video nodes to view gallery
-            </span>
+            <span className="text-neutral-500 text-[10px] text-center px-4">{tc("Connect image, video, or audio nodes to view gallery")}</span>
           </div>
         ) : (
           <div className="flex-1 overflow-y-auto nodrag nopan nowheel">
@@ -366,7 +422,7 @@ export function OutputGalleryNode({ id, data, selected }: NodeProps<OutputGaller
                 <button
                   key={idx}
                   onClick={() => openLightbox(idx)}
-                  aria-label={item.type === "video" ? `Open video ${idx + 1}` : `Open image ${idx + 1}`}
+                  aria-label={`Open ${item.type} ${idx + 1}`}
                   className="aspect-square rounded border border-neutral-700 hover:border-neutral-500 overflow-hidden transition-colors relative"
                 >
                   {item.type === "video" ? (
@@ -387,6 +443,12 @@ export function OutputGalleryNode({ id, data, selected }: NodeProps<OutputGaller
                         </svg>
                       </div>
                     </>
+                  ) : item.type === "audio" ? (
+                    <div className="flex h-full w-full items-center justify-center bg-neutral-800 text-violet-300">
+                      <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 9l10.5-3v10.5a2.5 2.5 0 1 1-1.5-2.29V6.9L9 9.47V18a2.5 2.5 0 1 1-1.5-2.29V9.43L9 9Z" />
+                      </svg>
+                    </div>
                   ) : (
                     <AdaptiveGalleryThumbnail src={item.src} alt={`Image ${idx + 1}`} nodeId={id} />
                   )}
@@ -407,6 +469,8 @@ export function OutputGalleryNode({ id, data, selected }: NodeProps<OutputGaller
             <div className="relative max-w-full max-h-full" onClick={(e) => e.stopPropagation()}>
               {currentItem.type === "video" ? (
                 <LightboxVideo src={currentItem.src} />
+              ) : currentItem.type === "audio" ? (
+                <audio src={currentItem.src} controls autoPlay className="w-[min(80vw,640px)]" />
               ) : (
                 <img
                   src={currentItem.src}
@@ -433,18 +497,14 @@ export function OutputGalleryNode({ id, data, selected }: NodeProps<OutputGaller
                 >
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
-                  </svg>
-                  Download
-                </button>
+                  </svg>{tc("Download")}</button>
                 <button
                   onClick={() => removeMedia(lightboxIndex)}
                   className="px-3 py-1.5 bg-white/10 hover:bg-red-600/80 rounded text-white text-xs font-medium transition-colors flex items-center gap-1.5"
                 >
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-                  </svg>
-                  Remove
-                </button>
+                  </svg>{tc("Remove")}</button>
               </div>
 
               {/* Left arrow */}

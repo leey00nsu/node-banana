@@ -6,6 +6,7 @@
  * fits under the limit.
  */
 
+/// <reference path="../types/gifenc.d.ts" />
 import { GIFEncoder, quantize, applyPalette } from "gifenc";
 
 export interface GifFrame {

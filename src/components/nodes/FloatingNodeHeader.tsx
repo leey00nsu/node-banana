@@ -1,11 +1,14 @@
 "use client";
+import { CanvasTextarea } from "../../leesfield/inputs";
+
+
+import { useCanvasTranslation } from "../../leesfield/localization";
 
 import { ReactNode, useState, useEffect, useRef, useCallback, memo } from "react";
 import { createPortal } from "react-dom";
 import { useReactFlow } from "@xyflow/react";
-import { NodeType, ProviderType } from "@/types";
-import { useWorkflowStore } from "@/store/workflowStore";
-import { defaultNodeDimensions } from "@/store/utils/nodeDefaults";
+import type { NodeType, ProviderType } from "../../leesfield/upstream-node-host";
+import { useWorkflowStore, defaultNodeDimensions } from "../../leesfield/upstream-node-host";
 import { ProviderBadge } from "./ProviderBadge";
 
 export interface CommentNavigationProps {
@@ -23,6 +26,7 @@ const RUNNABLE_TYPES = new Set([
   'llmGenerate',
   'removeBackground',
   'comfyApp',
+  'easeCurve',
 ]);
 const EXPANDABLE_TYPES = new Set(['prompt', 'promptConstructor', 'splitGrid', 'annotation']);
 
@@ -38,6 +42,8 @@ interface FloatingNodeHeaderProps {
   onExpandNode?: (nodeId: string, nodeType: string) => void;
   onRunNode?: (nodeId: string) => void;
   headerAction?: ReactNode;
+  runReady?: boolean;
+  runDisabledReason?: string | null;
   headerButtons?: ReactNode;
   /**
    * Buttons that should remain visible regardless of hover/selected state.
@@ -70,6 +76,8 @@ export const FloatingNodeHeader = memo(function FloatingNodeHeader({
   onExpandNode,
   onRunNode,
   headerAction,
+  runReady = true,
+  runDisabledReason,
   headerButtons,
   alwaysVisibleButtons,
   provider,
@@ -81,8 +89,11 @@ export const FloatingNodeHeader = memo(function FloatingNodeHeader({
   onCommentChange,
   commentNavigation,
 }: FloatingNodeHeaderProps) {
+  const tc = useCanvasTranslation();
   const canRun = RUNNABLE_TYPES.has(type);
   const canExpand = EXPANDABLE_TYPES.has(type);
+  const workflowStore = useWorkflowStore();
+  const writable = workflowStore.writable;
   const [isHeaderHovered, setIsHeaderHovered] = useState(false);
   const isBodyHovered = useWorkflowStore((state) => state.hoveredNodeId === id);
   const isHovered = isHeaderHovered || isBodyHovered;
@@ -165,6 +176,11 @@ export const FloatingNodeHeader = memo(function FloatingNodeHeader({
 
   // Title handlers
   const handleTitleSubmit = useCallback(() => {
+    if (!writable) {
+      setEditTitleValue(seedTitle);
+      setIsEditingTitle(false);
+      return;
+    }
     const trimmed = editTitleValue.trim();
     // Typing the node's own name back is not a custom title — storing it would
     // freeze the name against a later change of workflow.
@@ -173,7 +189,7 @@ export const FloatingNodeHeader = memo(function FloatingNodeHeader({
       onCustomTitleChange?.(id, next);
     }
     setIsEditingTitle(false);
-  }, [editTitleValue, defaultTitle, customTitle, onCustomTitleChange, id]);
+  }, [editTitleValue, defaultTitle, customTitle, onCustomTitleChange, id, seedTitle, writable]);
 
   const handleTitleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -189,12 +205,17 @@ export const FloatingNodeHeader = memo(function FloatingNodeHeader({
 
   // Comment handlers
   const handleCommentSubmit = useCallback(() => {
+    if (!writable) {
+      setEditCommentValue(comment || "");
+      setIsEditingComment(false);
+      return;
+    }
     const trimmed = editCommentValue.trim();
     if (trimmed !== (comment || "")) {
       onCommentChange?.(id, trimmed);
     }
     setIsEditingComment(false);
-  }, [editCommentValue, comment, onCommentChange, id]);
+  }, [editCommentValue, comment, onCommentChange, id, writable]);
 
   const handleCommentKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -228,6 +249,7 @@ export const FloatingNodeHeader = memo(function FloatingNodeHeader({
   const isDraggingRef = useRef(false);
 
   const handleHeaderPointerDown = useCallback((e: React.PointerEvent) => {
+    if (!writable) return;
     // Don't drag from interactive elements
     if ((e.target as HTMLElement).closest('.nodrag, button, input, textarea, a')) return;
     if (e.button !== 0) return;
@@ -292,15 +314,17 @@ export const FloatingNodeHeader = memo(function FloatingNodeHeader({
 
       // Check group membership for ALL moved nodes
       if (wasDragging) {
-        const store = useWorkflowStore.getState();
+        const store = workflowStore;
         const { zoom } = getViewport();
         const dx = (e.clientX - startX) / zoom;
         const dy = (e.clientY - startY) / zoom;
+        const committedPositions: Record<string, { x: number; y: number }> = {};
 
         for (const [nodeId, startPos] of startPositions) {
           // Calculate final position deterministically from drag delta
           const finalX = startPos.x + dx;
           const finalY = startPos.y + dy;
+          committedPositions[nodeId] = { x: finalX, y: finalY };
 
           // Get node dimensions from store (always fresh)
           const storeNode = store.nodes.find(n => n.id === nodeId);
@@ -334,15 +358,18 @@ export const FloatingNodeHeader = memo(function FloatingNodeHeader({
             store.setNodeGroupId(nodeId, targetGroupId);
           }
         }
+        store.commitNodePositions(committedPositions);
       }
     };
 
     document.addEventListener('pointermove', handlePointerMove);
     document.addEventListener('pointerup', handlePointerUp);
-  }, [id, getNodes, getViewport, setNodes]);
+  }, [id, getNodes, getViewport, setNodes, workflowStore, writable]);
 
   return (
     <div
+      data-node-banana-component="FloatingNodeHeader"
+      data-node-id={id}
       className="absolute pointer-events-none transition-opacity duration-200"
       style={{
         left: `${position.x}px`,
@@ -352,7 +379,7 @@ export const FloatingNodeHeader = memo(function FloatingNodeHeader({
       }}
     >
       <div
-        className="px-1 py-1 flex items-center justify-between w-full pointer-events-auto cursor-grab"
+        className={`px-1 py-1 flex items-center justify-between w-full pointer-events-auto ${writable ? "cursor-grab" : "cursor-default"}`}
         onMouseEnter={() => setIsHeaderHovered(true)}
         onMouseLeave={() => setIsHeaderHovered(false)}
         onPointerDown={handleHeaderPointerDown}
@@ -368,11 +395,12 @@ export const FloatingNodeHeader = memo(function FloatingNodeHeader({
               <input
                 ref={titleInputRef}
                 type="text"
+                disabled={!writable}
                 value={editTitleValue}
                 onChange={(e) => setEditTitleValue(e.target.value)}
                 onBlur={handleTitleSubmit}
                 onKeyDown={handleTitleKeyDown}
-                placeholder={titleLogo ? "Name this node..." : "Custom title..."}
+                placeholder={titleLogo ? tc("Name this node...") : tc("Custom title...")}
                 className={`nodrag nopan w-full bg-transparent border-none outline-none text-xs font-semibold tracking-wide text-neutral-300 placeholder:text-neutral-500 ${
                   titleLogo ? "" : "uppercase"
                 }`}
@@ -381,8 +409,8 @@ export const FloatingNodeHeader = memo(function FloatingNodeHeader({
           ) : (
             <span
               className="nodrag flex items-center gap-1.5 min-w-0 text-xs font-semibold uppercase tracking-wide text-neutral-400 cursor-text truncate"
-              onClick={() => setIsEditingTitle(true)}
-              title="Click to edit title"
+              onClick={() => { if (writable) setIsEditingTitle(true); }}
+              title={tc("Click to edit title")}
             >
               {titleLogo}
               {/* With a logo standing in for the kind of node, the text beside
@@ -390,9 +418,9 @@ export const FloatingNodeHeader = memo(function FloatingNodeHeader({
               {titleLogo ? (
                 seedTitle && <span className="truncate normal-case">{seedTitle}</span>
               ) : customTitle ? (
-                `${customTitle} - ${title}`
+                `${customTitle} - ${tc(title)}`
               ) : (
-                title
+                tc(title)
               )}
             </span>
           )}
@@ -414,7 +442,7 @@ export const FloatingNodeHeader = memo(function FloatingNodeHeader({
 
           {/* Lock Badge for nodes in locked groups */}
           {isInLockedGroup && (
-            <div className="shrink-0 flex items-center" title="This node is in a locked group and will be skipped during execution">
+            <div className="shrink-0 flex items-center" title={tc("This node is in a locked group and will be skipped during execution")}>
               <svg className="w-3.5 h-3.5 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
               </svg>
@@ -428,7 +456,8 @@ export const FloatingNodeHeader = memo(function FloatingNodeHeader({
           <div className="relative shrink-0 flex items-center gap-1" ref={commentPopoverRef}>
             <button
               ref={commentButtonRef}
-              onClick={() => setIsEditingComment(!isEditingComment)}
+              onClick={() => { if (writable) setIsEditingComment(!isEditingComment); }}
+              disabled={!writable}
               onMouseEnter={() => comment && !isCommentFocused && setShowCommentTooltip(true)}
               onMouseLeave={() => setShowCommentTooltip(false)}
               className={`nodrag nopan p-0.5 rounded transition-colors ${
@@ -436,7 +465,7 @@ export const FloatingNodeHeader = memo(function FloatingNodeHeader({
                   ? "text-blue-400 hover:text-blue-200"
                   : "text-neutral-500 hover:text-neutral-200 border border-neutral-600"
               }`}
-              title={comment ? "Edit comment" : "Add comment"}
+              title={comment ? tc("Edit comment") : tc("Add comment")}
             >
               {comment ? (
                 <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
@@ -468,7 +497,7 @@ export const FloatingNodeHeader = memo(function FloatingNodeHeader({
                         commentNavigation.onPrevious();
                       }}
                       className="nodrag nopan w-6 h-6 flex items-center justify-center text-neutral-400 hover:text-neutral-100 hover:bg-neutral-700 rounded transition-colors"
-                      title="Previous comment"
+                      data-canvas-action="previous-comment" title={tc("Previous comment")}
                     >
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
@@ -483,7 +512,7 @@ export const FloatingNodeHeader = memo(function FloatingNodeHeader({
                         commentNavigation.onNext();
                       }}
                       className="nodrag nopan w-6 h-6 flex items-center justify-center text-neutral-400 hover:text-neutral-100 hover:bg-neutral-700 rounded transition-colors"
-                      title="Next comment"
+                      data-canvas-action="next-comment" title={tc("Next comment")}
                     >
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
@@ -501,11 +530,12 @@ export const FloatingNodeHeader = memo(function FloatingNodeHeader({
             {/* Comment Edit Popover */}
             {isEditingComment && (
               <div className="absolute z-[60] right-0 top-full mt-1 w-64 p-2 bg-neutral-800 border border-neutral-600 rounded shadow-lg">
-                <textarea
+                <CanvasTextarea
                   value={editCommentValue}
+                  disabled={!writable}
                   onChange={(e) => setEditCommentValue(e.target.value)}
                   onKeyDown={handleCommentKeyDown}
-                  placeholder="Add a comment..."
+                  placeholder={tc("Add a comment...")}
                   autoFocus
                   className="nodrag nopan nowheel w-full h-20 p-2 text-xs text-neutral-100 bg-neutral-900/50 border border-neutral-700 rounded resize-none focus:outline-none focus:ring-1 focus:ring-neutral-600"
                 />
@@ -516,15 +546,12 @@ export const FloatingNodeHeader = memo(function FloatingNodeHeader({
                       setIsEditingComment(false);
                     }}
                     className="px-2 py-1 text-xs text-neutral-400 hover:text-neutral-200 transition-colors"
-                  >
-                    Cancel
-                  </button>
+                  >{tc("Cancel")}</button>
                   <button
                     onClick={handleCommentSubmit}
+                    disabled={!writable}
                     className="px-2 py-1 text-xs text-white bg-blue-600 hover:bg-blue-500 rounded transition-colors"
-                  >
-                    Save
-                  </button>
+                  >{tc("Save")}</button>
                 </div>
               </div>
             )}
@@ -536,7 +563,7 @@ export const FloatingNodeHeader = memo(function FloatingNodeHeader({
               <button
                 onClick={() => onExpandNode(id, type)}
                 className="nodrag nopan p-0.5 rounded transition-all duration-200 ease-in-out text-neutral-500 group-hover:text-neutral-200 border border-neutral-600 flex items-center overflow-hidden group-hover:pr-2"
-                title="Expand editor"
+                title={tc("Expand editor")}
               >
                 <svg
                   className="w-3.5 h-3.5 flex-shrink-0"
@@ -552,9 +579,7 @@ export const FloatingNodeHeader = memo(function FloatingNodeHeader({
                   <line x1="21" y1="3" x2="14" y2="10" />
                   <line x1="3" y1="21" x2="10" y2="14" />
                 </svg>
-                <span className="max-w-0 opacity-0 whitespace-nowrap text-[10px] transition-all duration-200 ease-in-out overflow-hidden group-hover:max-w-[60px] group-hover:opacity-100 group-hover:ml-1">
-                  Expand
-                </span>
+                <span className="max-w-0 opacity-0 whitespace-nowrap text-[10px] transition-all duration-200 ease-in-out overflow-hidden group-hover:max-w-[60px] group-hover:opacity-100 group-hover:ml-1">{tc("Expand")}</span>
               </button>
             </div>
           )}
@@ -564,16 +589,23 @@ export const FloatingNodeHeader = memo(function FloatingNodeHeader({
             <div className="relative shrink-0 group">
               <button
                 onClick={() => onRunNode(id)}
-                disabled={isExecuting}
+                disabled={isExecuting || !runReady}
+                aria-label={!runReady
+                  ? `${tc("Run node unavailable:")} ${tc(runDisabledReason || "This node is not ready to run.")}`
+                  : isExecuting
+                    ? tc("Run node unavailable: This node is currently running.")
+                    : tc("Run this node")}
                 className="nodrag nopan p-0.5 rounded transition-all duration-200 ease-in-out text-neutral-500 group-hover:text-neutral-200 border border-neutral-600 flex items-center overflow-hidden group-hover:pr-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Run this node"
+                data-canvas-action="run" title={!runReady
+                  ? `${tc("Run node unavailable:")} ${tc(runDisabledReason || "This node is not ready to run.")}`
+                  : isExecuting
+                    ? tc("Run node unavailable: This node is currently running.")
+                    : tc("Run this node")}
               >
                 <svg className="w-3.5 h-3.5 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M8 5v14l11-7z" />
                 </svg>
-                <span className="max-w-0 opacity-0 whitespace-nowrap text-[10px] transition-all duration-200 ease-in-out overflow-hidden group-hover:max-w-[60px] group-hover:opacity-100 group-hover:ml-1">
-                  Run node
-                </span>
+                <span className="max-w-0 opacity-0 whitespace-nowrap text-[10px] transition-all duration-200 ease-in-out overflow-hidden group-hover:max-w-[60px] group-hover:opacity-100 group-hover:ml-1">{tc("Run node")}</span>
               </button>
             </div>
           )}

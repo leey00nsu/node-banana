@@ -1,7 +1,10 @@
 "use client";
 
+import { useCanvasTranslation } from "../../leesfield/localization";
+import { Handle } from "../../leesfield/port-handle";
+
 import React, { useCallback, useState, useEffect, useMemo } from "react";
-import { Handle, Position, NodeProps, Node, useReactFlow } from "@xyflow/react";
+import { Position, NodeProps, Node, useReactFlow } from "@xyflow/react";
 import { BaseNode } from "./BaseNode";
 import { ModelParameters } from "./ModelParameters";
 import { useWorkflowStore, useProviderApiKeys } from "@/store/workflowStore";
@@ -25,6 +28,7 @@ const THREE_D_CAPABILITIES: ModelCapability[] = ["text-to-3d", "image-to-3d"];
 type Generate3DNodeType = Node<Generate3DNodeData, "generate3d">;
 
 export function Generate3DNode({ id, data, selected }: NodeProps<Generate3DNodeType>) {
+  const tc = useCanvasTranslation();
   const nodeData = data;
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
   const { replicateApiKey, falApiKey, kieApiKey } = useProviderApiKeys();
@@ -164,9 +168,7 @@ export function Generate3DNode({ id, data, selected }: NodeProps<Generate3DNodeT
                 <button
                   onClick={() => setIsBrowseDialogOpen(true)}
                   className="nodrag nopan shrink-0 px-2 py-1 text-[10px] bg-neutral-700 hover:bg-neutral-600 border border-neutral-600 rounded text-neutral-300 transition-colors"
-                >
-                  Browse
-                </button>
+                >{tc("Browse")}</button>
               </div>
 
               {/* External provider parameters */}
@@ -323,7 +325,7 @@ export function Generate3DNode({ id, data, selected }: NodeProps<Generate3DNodeT
             data-handletype="image"
             isConnectable={true}
           />
-          <HandleLabel label="Image" side="target" color="var(--handle-color-image)" top="calc(35% - 18px)" visible={showLabels} />
+          <HandleLabel label={tc("Image")} side="target" color="var(--handle-color-image)" top="calc(35% - 18px)" visible={showLabels} />
           <Handle
             type="target"
             position={Position.Left}
@@ -331,7 +333,7 @@ export function Generate3DNode({ id, data, selected }: NodeProps<Generate3DNodeT
             style={{ top: "65%" }}
             data-handletype="text"
           />
-          <HandleLabel label="Prompt" side="target" color="var(--handle-color-text)" top="calc(65% - 18px)" visible={showLabels} />
+          <HandleLabel label={tc("Prompt")} side="target" color="var(--handle-color-text)" top="calc(65% - 18px)" visible={showLabels} />
         </>
       )}
 
@@ -353,9 +355,7 @@ export function Generate3DNode({ id, data, selected }: NodeProps<Generate3DNodeT
               <div
                 className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-emerald-900/70 text-emerald-300 text-[9px] font-medium pointer-events-auto z-10"
                 title={`Primary failed: ${nodeData.__primaryError ?? "unknown"}\nUsed fallback: ${nodeData.__fallbackModelUsed ?? ""}`}
-              >
-                Fallback used
-              </div>
+              >{tc("Fallback used")}</div>
             )}
             <svg className="w-8 h-8 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M21 7.5l-2.25-1.313M21 7.5v2.25m0-2.25l-2.25 1.313M3 7.5l2.25-1.313M3 7.5l2.25 1.313M3 7.5v2.25m9 3l2.25-1.313M12 12.75l-2.25-1.313M12 12.75V15m0 6.75l2.25-1.313M12 21.75V19.5m0 2.25l-2.25-1.313m0-16.875L12 2.25l2.25 1.313M21 14.25v2.25l-2.25 1.313m-13.5 0L3 16.5v-2.25" />
@@ -414,8 +414,8 @@ export function Generate3DNode({ id, data, selected }: NodeProps<Generate3DNodeT
                 <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                <span className="text-white text-xs font-medium">Generation failed</span>
-                <span className="text-white/70 text-[10px]">See toast for details</span>
+                <span className="text-white text-xs font-medium">{tc("Generation failed")}</span>
+                <span className="text-white/70 text-[10px]">{tc("See toast for details")}</span>
               </div>
             )}
             <div className="absolute top-1 right-1">
@@ -446,9 +446,7 @@ export function Generate3DNode({ id, data, selected }: NodeProps<Generate3DNodeT
                 {nodeData.error || "Failed"}
               </span>
             ) : (
-              <span className="text-neutral-500 text-[10px]">
-                Run to generate
-              </span>
+              <span className="text-neutral-500 text-[10px]">{tc("Run to generate")}</span>
             )}
           </div>
         )}

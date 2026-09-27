@@ -6,7 +6,7 @@ import {
   EdgeProps,
   getBezierPath,
 } from "@xyflow/react";
-import { useWorkflowStore } from "@/store/workflowStore";
+import { useWorkflowStore } from "../../leesfield/upstream-node-host";
 import { getSharedGradientId } from "./SharedEdgeGradients";
 
 export function ReferenceEdge({

@@ -1,5 +1,5 @@
-import { WorkflowFile } from "@/store/workflowStore";
-import { TemplateCategory, TemplateMetadata } from "@/types/quickstart";
+import type { HostedPresetWorkflow as WorkflowFile } from "../../leesfield/hosted-preset-types";
+import { TemplateCategory, TemplateMetadata } from "../../types/quickstart";
 
 export type ContentLevel = "empty" | "minimal" | "full";
 

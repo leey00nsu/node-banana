@@ -1,9 +1,10 @@
 "use client";
 
+import { useCanvasTranslation } from "../leesfield/localization";
+
 import { useEffect, useRef, useState, useCallback } from "react";
-import { NodeType } from "@/types";
-import { useSavedComfyNodes } from "@/hooks/useSavedComfyNodes";
-import type { SavedComfyNode } from "@/lib/comfy/library";
+import { useSavedComfyNodes } from "../leesfield/upstream-node-host";
+import type { NodeType, SavedComfyNode } from "../leesfield/upstream-node-host";
 import { ComfyMark } from "./icons/ComfyMark";
 
 // Actions are special menu items that trigger behavior instead of creating a node
@@ -834,6 +835,21 @@ export function savedComfyOptionsFor(
   );
 }
 
+export type ConnectionDropMenuHostedOption = {
+  type: string;
+  label: string;
+  icon?: React.ReactNode;
+  isAction?: boolean;
+  /** Opaque host value returned unchanged to the host callback. */
+  value?: unknown;
+};
+
+export type ConnectionDropMenuHostedProps = {
+  hostedOptions: readonly ConnectionDropMenuHostedOption[];
+  onHostedSelect: (option: ConnectionDropMenuHostedOption) => void;
+  hostedAriaLabel?: string;
+};
+
 interface ConnectionDropMenuProps {
   position: { x: number; y: number };
   handleType: "image" | "text" | "video" | "audio" | "3d" | "easeCurve" | null;
@@ -844,15 +860,18 @@ interface ConnectionDropMenuProps {
     savedNodeId?: string;
   }) => void;
   onClose: () => void;
+  /** Explicit hosted inventory; omitting this keeps the standalone menu. */
+  hosted?: ConnectionDropMenuHostedProps;
 }
 
-export function ConnectionDropMenu({
+function StandaloneConnectionDropMenu({
   position,
   handleType,
   connectionType,
   onSelect,
   onClose,
 }: ConnectionDropMenuProps) {
+  const tc = useCanvasTranslation();
   const menuRef = useRef<HTMLDivElement>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const savedNodes = useSavedComfyNodes();
@@ -949,9 +968,7 @@ export function ConnectionDropMenu({
       }}
     >
       <div className="px-2 py-1.5 border-b border-neutral-700">
-        <span className="text-[10px] text-neutral-400 uppercase tracking-wide">
-          Add {handleType} node
-        </span>
+        <span className="text-[10px] text-neutral-400 uppercase tracking-wide">{tc("Add {media} node").replace("{media}",tc(handleType ?? ""))}</span>
       </div>
       <div className="py-1">
         {options.map((option, index) => (
@@ -973,18 +990,116 @@ export function ConnectionDropMenu({
             }`}
           >
             {option.icon}
-            {option.label}
+            {tc(option.label)}
           </button>
         ))}
       </div>
       <div className="px-2 py-1.5 border-t border-neutral-700 flex items-center justify-between">
         <span className="text-[9px] text-neutral-500">
-          <kbd className="px-1 py-0.5 bg-neutral-700 rounded text-[8px]">↑↓</kbd> navigate
-        </span>
+          <kbd className="px-1 py-0.5 bg-neutral-700 rounded text-[8px]">↑↓</kbd>{tc("navigate")}</span>
         <span className="text-[9px] text-neutral-500">
-          <kbd className="px-1 py-0.5 bg-neutral-700 rounded text-[8px]">↵</kbd> select
-        </span>
+          <kbd className="px-1 py-0.5 bg-neutral-700 rounded text-[8px]">↵</kbd>{tc("select")}</span>
       </div>
     </div>
   );
+}
+
+function HostedConnectionDropMenu({
+  position,
+  onClose,
+  hostedOptions,
+  onHostedSelect,
+  hostedAriaLabel = "Add node",
+  handleType,
+}: ConnectionDropMenuProps & ConnectionDropMenuHostedProps) {
+  const tc = useCanvasTranslation();
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [query,setQuery]=useState("");
+  const visibleOptions=hostedOptions.filter(option=>(option.label + " " + tc(option.label)).toLowerCase().includes(query.toLowerCase()));
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.isComposing || event.keyCode === 229) return;
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        setSelectedIndex((index) => visibleOptions.length ? (index + 1) % visibleOptions.length : 0);
+      } else if (event.key === "ArrowUp") {
+        event.preventDefault();
+        setSelectedIndex((index) => visibleOptions.length ? (index - 1 + visibleOptions.length) % visibleOptions.length : 0);
+      } else if (event.key === "Enter") {
+        event.preventDefault();
+        const option = visibleOptions[selectedIndex];
+        if (option) {
+          onHostedSelect(option);
+          onClose();
+        }
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [visibleOptions, selectedIndex, onClose, onHostedSelect]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) onClose();
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [onClose]);
+
+  useEffect(() => menuRef.current?.focus(), []);
+
+
+
+  const select = (option: ConnectionDropMenuHostedOption) => {
+    onHostedSelect(option);
+    onClose();
+  };
+
+  return (
+    <div
+      ref={menuRef}
+      tabIndex={-1}
+      role="dialog"
+      aria-label={hostedAriaLabel}
+      data-node-banana-component="ConnectionDropMenu"
+      className="fixed z-100 min-w-[160px] overflow-hidden rounded-lg border border-neutral-600 bg-neutral-800 shadow-xl outline-none node-banana-runtime__menu"
+      style={{ position: "fixed", width:220, maxWidth:"calc(100vw - 24px)", maxHeight:"70vh", overflowY:"auto", left:Math.max(12,Math.min(position.x-110,window.innerWidth-232)), top:Math.max(12,Math.min(position.y,window.innerHeight*0.3-12)) }}
+    >
+      <div className="border-b border-neutral-700 px-2 py-1.5">
+        <span className="text-[10px] uppercase tracking-wide text-neutral-400">{handleType ? tc("Add {media} node").replace("{media}",tc(handleType)) : tc("Add node")}</span>
+      </div>
+      <input aria-label={tc("Search connections")} placeholder={tc("Search...")} value={query} onChange={event=>{setQuery(event.target.value);setSelectedIndex(0);}} className="m-2 rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-xs"/>
+      {visibleOptions.length === 0 && <p className="p-3 text-xs text-neutral-400">{tc("No compatible nodes.")}</p>}
+      <div className="py-1">
+        {visibleOptions.map((option, index) => (
+          <button
+            key={`${option.type}-${index}`}
+            type="button"
+            onClick={() => select(option)}
+            onMouseEnter={() => setSelectedIndex(index)}
+            data-tutorial={option.type === "nanoBanana" ? "generate-image-option" : undefined}
+            className={`w-full px-3 py-2 text-left text-[11px] font-medium flex items-center gap-2 transition-colors ${index === selectedIndex ? "bg-neutral-700 text-neutral-100" : "text-neutral-300 hover:bg-neutral-700 hover:text-neutral-100"}`}
+          >
+            {option.icon}
+            {tc(option.label)}
+          </button>
+        ))}
+      </div>
+      <div className="flex items-center justify-between border-t border-neutral-700 px-2 py-1.5">
+        <span className="text-[9px] text-neutral-500"><kbd className="rounded bg-neutral-700 px-1 py-0.5 text-[8px]">↑↓</kbd>{tc("navigate")}</span>
+        <span className="text-[9px] text-neutral-500"><kbd className="rounded bg-neutral-700 px-1 py-0.5 text-[8px]">↵</kbd>{tc("select")}</span>
+      </div>
+    </div>
+  );
+}
+
+export function ConnectionDropMenu(props: ConnectionDropMenuProps) {
+  return props.hosted
+    ? <HostedConnectionDropMenu {...props} {...props.hosted} />
+    : <StandaloneConnectionDropMenu {...props} />;
 }

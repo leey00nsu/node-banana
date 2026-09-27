@@ -1,28 +1,47 @@
 "use client";
+import { CanvasSelect, CanvasInput } from "../../leesfield/inputs";
+
+
+import { useCanvasTranslation } from "../../leesfield/localization";
+import { Handle } from "../../leesfield/port-handle";
 
 import React, { useCallback, useState, useEffect, useMemo, useRef } from "react";
-import { Handle, Position, NodeProps, Node, useReactFlow } from "@xyflow/react";
+import { Position, NodeProps, Node, useReactFlow, useUpdateNodeInternals } from "@xyflow/react";
 import { BaseNode } from "./BaseNode";
 import { ModelParameters } from "./ModelParameters";
-import { useWorkflowStore, saveNanoBananaDefaults, useProviderApiKeys } from "@/store/workflowStore";
-import { deduplicatedFetch } from "@/utils/deduplicatedFetch";
-import { NanoBananaNodeData, AspectRatio, Resolution, MODEL_DISPLAY_NAMES, ProviderType, SelectedModel, ModelInputDef, GEMINI_IMAGE_MODELS, ModelType } from "@/types";
-import { ProviderModel, ModelCapability } from "@/lib/providers/types";
-import { ModelSearchDialog } from "@/components/modals/ModelSearchDialog";
-import { getImageDimensions } from "@/utils/nodeDimensions";
+import { ModelSearchDialog } from "../modals/ModelSearchDialog";
 import { ProviderBadge } from "./ProviderBadge";
-import { useInlineParameters } from "@/hooks/useInlineParameters";
 import { InlineParameterPanel } from "./InlineParameterPanel";
 import { SettingsTabBar } from "./SettingsTabBar";
-import { browseRegistry } from "@/utils/browseRegistry";
-import { useAdaptiveImageSrc } from "@/hooks/useAdaptiveImageSrc";
-import { downloadMedia } from "@/utils/downloadMedia";
-import { useShowHandleLabels } from "@/hooks/useShowHandleLabels";
 import { HandleLabel } from "./HandleLabel";
-import { useLoadGenerationById } from "@/hooks/useLoadGenerationById";
-import { useGenerationCarousel } from "@/hooks/useGenerationCarousel";
-import { useErrorToast } from "@/hooks/useErrorToast";
-import { useAutoResizeOnMedia } from "@/hooks/useAutoResizeOnMedia";
+import { getImageDimensions } from "../../utils/nodeDimensions";
+import { downloadMedia } from "../../utils/downloadMedia";
+import {
+  AspectRatio,
+  GEMINI_IMAGE_MODELS,
+  HostedGenerationPrompt,
+  ModelCapability,
+  ModelInputDef,
+  MODEL_DISPLAY_NAMES,
+  ModelType,
+  NanoBananaNodeData,
+  ProviderModel,
+  ProviderType,
+  Resolution,
+  SelectedModel,
+  browseRegistry,
+  deduplicatedFetch,
+  saveNanoBananaDefaults,
+  useAdaptiveImageSrc,
+  useAutoResizeOnMedia,
+  useErrorToast,
+  useGenerationCarousel,
+  useInlineParameters,
+  useLoadGenerationById,
+  useProviderApiKeys,
+  useShowHandleLabels,
+  useWorkflowStore,
+} from "../../leesfield/upstream-node-host";
 
 /** Reorder items so they read column-first in a row-based CSS grid.
  *  e.g. [1,2,3,4,5,6,7,8] with 2 cols → [1,5,2,6,3,7,4,8] */
@@ -51,10 +70,25 @@ const RESOLUTIONS_NB2: Resolution[] = ["512", "1K", "2K", "4K"];
 // Image generation capabilities
 const IMAGE_CAPABILITIES: ModelCapability[] = ["text-to-image", "image-to-image"];
 
+function geminiImageModelId(value: unknown): ModelType {
+  const candidate = typeof value === "string" ? value : "";
+  return GEMINI_IMAGE_MODELS.some((model) => model.value === candidate)
+    ? candidate
+    : "nano-banana-pro";
+}
+
 type NanoBananaNodeType = Node<NanoBananaNodeData, "nanoBanana">;
 
 export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNodeType>) {
+  const tc = useCanvasTranslation();
   const nodeData = data;
+  const providerInputSignature=JSON.stringify(nodeData.providerInputSchema);
+  const updateNodeInternals = useUpdateNodeInternals();
+  useEffect(() => {
+    // The model catalog arrives after the first handle measurement.
+    // Refresh geometry when the image port appears or disappears.
+    updateNodeInternals(id);
+  }, [id, nodeData.supportsImageInput, providerInputSignature, updateNodeInternals]);
   const adaptiveOutputImage = useAdaptiveImageSrc(data.outputImage, id);
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
   // Use stable selector for API keys to prevent unnecessary re-fetches
@@ -173,7 +207,7 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
   }, [fetchModels]);
 
   // Inline parameters: compute collapse state and toggle handler
-  const isParamsExpanded = nodeData.parametersExpanded ?? true; // default expanded
+  const isParamsExpanded = nodeData.parametersExpanded ?? false;
 
   const handleToggleParams = useCallback(() => {
     updateNodeData(id, { parametersExpanded: !isParamsExpanded });
@@ -185,14 +219,18 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
       const provider = e.target.value as ProviderType;
 
       if (provider === "gemini") {
-        // Reset to Gemini default
+        // External model IDs also live in the legacy `model` field. Only carry
+        // forward a model that is actually part of Gemini's image catalog.
+        const modelId = currentProvider === "gemini"
+          ? geminiImageModelId(nodeData.selectedModel?.modelId || nodeData.model)
+          : geminiImageModelId(undefined);
         const newSelectedModel: SelectedModel = {
           provider: "gemini",
-          modelId: nodeData.model || "nano-banana-pro",
-          displayName: GEMINI_IMAGE_MODELS.find(m => m.value === (nodeData.model || "nano-banana-pro"))?.label || "Nano Banana Pro",
+          modelId,
+          displayName: GEMINI_IMAGE_MODELS.find((model) => model.value === modelId)?.label || "Nano Banana Pro",
         };
         // Clear parameters when switching providers (different providers have different schemas)
-        updateNodeData(id, { selectedModel: newSelectedModel, parameters: {} });
+        updateNodeData(id, { model: modelId, selectedModel: newSelectedModel, parameters: {}, inputSchema: undefined });
       } else {
         // Set placeholder for external provider
         const newSelectedModel: SelectedModel = {
@@ -201,10 +239,10 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
           displayName: "Select model...",
         };
         // Clear parameters when switching providers
-        updateNodeData(id, { selectedModel: newSelectedModel, parameters: {} });
+        updateNodeData(id, { model: "", selectedModel: newSelectedModel, parameters: {}, inputSchema: undefined });
       }
     },
-    [id, nodeData.model, updateNodeData]
+    [currentProvider, id, nodeData.model, nodeData.selectedModel?.modelId, updateNodeData]
   );
 
   // Handle model change for external providers
@@ -220,7 +258,7 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
           capabilities: model.capabilities,
         };
         // Clear parameters when changing models (different models have different schemas)
-        updateNodeData(id, { selectedModel: newSelectedModel, parameters: {} });
+        updateNodeData(id, { model: model.id, selectedModel: newSelectedModel, parameters: {}, inputSchema: undefined });
       }
     },
     [id, currentProvider, externalModels, updateNodeData]
@@ -247,7 +285,6 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
   const handleModelChange = useCallback(
     (e: React.ChangeEvent<HTMLSelectElement>) => {
       const model = e.target.value as ModelType;
-      updateNodeData(id, { model });
       saveNanoBananaDefaults({ model });
 
       // Also update selectedModel for consistency
@@ -256,7 +293,10 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
         modelId: model,
         displayName: GEMINI_IMAGE_MODELS.find(m => m.value === model)?.label || model,
       };
-      updateNodeData(id, { selectedModel: newSelectedModel });
+      // Replace the model-specific snapshot and schema in one host patch. A
+      // pair of shallow updates lets the previous model's parameters survive
+      // between renders and be persisted again by the canonical bridge.
+      updateNodeData(id, { model, selectedModel: newSelectedModel, parameters: {}, inputSchema: undefined });
     },
     [id, updateNodeData]
   );
@@ -315,7 +355,7 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
   );
 
   const handleClearImage = useCallback(() => {
-    updateNodeData(id, { outputImage: null, status: "idle", error: null });
+    updateNodeData(id, { outputImage: null, selectedOutputAssetId: null, status: "idle", error: null });
   }, [id, updateNodeData]);
 
   const regenerateNode = useWorkflowStore((state) => state.regenerateNode);
@@ -338,6 +378,9 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
     loadFn: loadImageById,
     buildUpdate: (image, newIndex) => ({
       outputImage: image,
+      selectedOutputAssetId: typeof nodeData.imageHistory?.[newIndex]?.id === "string"
+        ? nodeData.imageHistory[newIndex].id
+        : null,
       selectedHistoryIndex: newIndex,
       status: "idle",
       error: null,
@@ -346,13 +389,19 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
 
   // Handle model selection from browse dialog
   const handleBrowseModelSelect = useCallback((model: ProviderModel) => {
+    // The browser can switch providers in one interaction. Keep Gemini image
+    // selections inside its known model catalog instead of carrying an
+    // external provider ID into the Gemini controls.
+    const modelId = model.provider === "gemini" ? geminiImageModelId(model.id) : model.id;
     const newSelectedModel: SelectedModel = {
       provider: model.provider,
-      modelId: model.id,
-      displayName: model.name,
+      modelId,
+      displayName: model.provider === "gemini"
+        ? GEMINI_IMAGE_MODELS.find((entry) => entry.value === modelId)?.label || "Nano Banana Pro"
+        : model.name,
       capabilities: model.capabilities,
     };
-    updateNodeData(id, { selectedModel: newSelectedModel, parameters: {} });
+    updateNodeData(id, { model: modelId, selectedModel: newSelectedModel, parameters: {}, inputSchema: undefined });
     setIsBrowseDialogOpen(false);
   }, [id, updateNodeData]);
 
@@ -423,6 +472,7 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
       isExecuting={isRunning}
       hasError={nodeData.status === "error"}
       fullBleed
+      contentClassName="flex flex-col flex-1 min-h-0 relative"
       settingsExpanded={inlineParametersEnabled && isParamsExpanded}
       aspectFitMedia={nodeData.outputImage}
       dataTutorial="generate-image-node"
@@ -449,8 +499,8 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
               {isGeminiProvider && currentModelId && (() => {
                 const controls: React.ReactNode[] = [
                   <div key="model" className="flex items-center gap-2">
-                    <label className="text-[11px] text-neutral-400 shrink-0">Model</label>
-                    <select
+                    <label className="text-[11px] text-neutral-400 shrink-0">{tc("Model")}</label>
+                    <CanvasSelect
                       value={currentModelId}
                       onChange={handleModelChange}
                       data-tutorial="generate-model-selector"
@@ -461,11 +511,11 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
                           {m.label}
                         </option>
                       ))}
-                    </select>
+                    </CanvasSelect>
                   </div>,
                   <div key="aspect-ratio" className="flex items-center gap-2">
-                    <label className="text-[11px] text-neutral-400 shrink-0">Aspect Ratio</label>
-                    <select
+                    <label className="text-[11px] text-neutral-400 shrink-0">{tc("Aspect Ratio")}</label>
+                    <CanvasSelect
                       value={nodeData.aspectRatio || "1:1"}
                       onChange={handleAspectRatioChange}
                       className="nodrag nopan flex-1 min-w-0 text-[11px] py-1 px-2 bg-[#1a1a1a] rounded-md focus:outline-none focus:ring-1 focus:ring-neutral-600 text-white"
@@ -475,15 +525,15 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
                           {ratio}
                         </option>
                       ))}
-                    </select>
+                    </CanvasSelect>
                   </div>,
                 ];
 
                 if (supportsResolution) {
                   controls.push(
                     <div key="resolution" className="flex items-center gap-2">
-                      <label className="text-[11px] text-neutral-400 shrink-0">Resolution</label>
-                      <select
+                      <label className="text-[11px] text-neutral-400 shrink-0">{tc("Resolution")}</label>
+                      <CanvasSelect
                         value={nodeData.resolution || "2K"}
                         onChange={handleResolutionChange}
                         className="nodrag nopan flex-1 min-w-0 text-[11px] py-1 px-2 bg-[#1a1a1a] rounded-md focus:outline-none focus:ring-1 focus:ring-neutral-600 text-white"
@@ -493,7 +543,7 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
                             {res}
                           </option>
                         ))}
-                      </select>
+                      </CanvasSelect>
                     </div>
                   );
                 }
@@ -501,28 +551,24 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
                 if (currentModelId === "nano-banana-pro" || currentModelId === "nano-banana-2") {
                   controls.push(
                     <label key="google-search" className="flex items-center gap-1.5 text-[11px] text-neutral-300 cursor-pointer">
-                      <input
+                      <CanvasInput
                         type="checkbox"
                         checked={nodeData.useGoogleSearch || false}
                         onChange={handleGoogleSearchToggle}
                         className="nodrag nopan w-3 h-3 rounded bg-[#1a1a1a] text-neutral-600 focus:ring-1 focus:ring-neutral-600 focus:ring-offset-0"
-                      />
-                      Google Search
-                    </label>
+                      />{tc("Google Search")}</label>
                   );
                 }
 
                 if (currentModelId === "nano-banana-2") {
                   controls.push(
                     <label key="image-search" className="flex items-center gap-1.5 text-[11px] text-neutral-300 cursor-pointer">
-                      <input
+                      <CanvasInput
                         type="checkbox"
                         checked={nodeData.useImageSearch || false}
                         onChange={handleImageSearchToggle}
                         className="nodrag nopan w-3 h-3 rounded bg-[#1a1a1a] text-neutral-600 focus:ring-1 focus:ring-neutral-600 focus:ring-offset-0"
-                      />
-                      Image Search
-                    </label>
+                      />{tc("Image Search")}</label>
                   );
                 }
 
@@ -568,18 +614,15 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
         </InlineParameterPanel>
       ) : undefined}
     >
-      {/* Input handles - ALWAYS use same IDs and positions for connection stability */}
-      {/* Image input at 35%, Text input at 65% - never changes regardless of model */}
-      <Handle
-        type="target"
-        position={Position.Left}
-        id="image"
-        style={{ top: "35%", zIndex: 10 }}
-        data-handletype="image"
-        isConnectable={true}
-      />
-      {/* Image label */}
-      <HandleLabel label="Image" side="target" color="var(--handle-color-image)" top="calc(35% - 18px)" visible={showLabels} />
+      {(nodeData as unknown as {providerInputSchema?:ModelInputDef[]}).providerInputSchema?.map((input,index,all)=>(
+        <React.Fragment key={input.name}>
+          <Handle type="target" position={Position.Left} id={input.name} data-handletype={input.type} style={{top: `${15+index*45/Math.max(1,all.length)}%`,zIndex:10}} isConnectable={true}/>
+          <HandleLabel label={input.label} side="target" color={`var(--handle-color-${input.type})`} top={`calc(${15+index*45/Math.max(1,all.length)}% - 18px)`} visible={showLabels}/>
+        </React.Fragment>
+      ))}
+      {nodeData.supportsImageInput && !(nodeData as unknown as {providerInputSchema?:ModelInputDef[]}).providerInputSchema && (
+        <><Handle type="target" position={Position.Left} id="image" style={{top:"35%",zIndex:10}} data-handletype="image" isConnectable={true}/><HandleLabel label={tc("Image")} side="target" color="var(--handle-color-image)" top="calc(35% - 18px)" visible={showLabels}/></>
+      )}
       <Handle
         type="target"
         position={Position.Left}
@@ -590,7 +633,7 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
         isConnectable={true}
       />
       {/* Prompt label */}
-      <HandleLabel label="Prompt" side="target" color="var(--handle-color-text)" top="calc(65% - 18px)" visible={showLabels} />
+      <HandleLabel label={tc("Prompt")} side="target" color="var(--handle-color-text)" top="calc(65% - 18px)" visible={showLabels} />
       {/* Output handle */}
       <Handle
         type="source"
@@ -600,10 +643,17 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
         data-handletype="image"
       />
       {/* Output label */}
-      <HandleLabel label="Image" side="source" color="var(--handle-color-image)" visible={showLabels} />
+      <HandleLabel label={tc("Image")} side="source" color="var(--handle-color-image)" visible={showLabels} />
+
+      <HostedGenerationPrompt
+        nodeId={id}
+        value={nodeData.internalPrompt}
+        connectedValue={nodeData.prompt}
+        connected={nodeData.promptConnected === true}
+      />
 
       <div
-        className="relative w-full h-full min-h-0 overflow-hidden rounded-lg"
+        className="relative w-full flex-1 min-h-0 overflow-hidden rounded-lg"
         data-tutorial="generate-output-area"
       >
         {/* Preview area */}
@@ -611,16 +661,14 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
           <>
             <img
               src={adaptiveOutputImage ?? undefined}
-              alt="Generated"
+              alt={tc("Generated")}
               className="w-full h-full object-cover"
             />
             {nodeData.__usedFallback && (
               <div
                 className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-emerald-900/70 text-emerald-300 text-[9px] font-medium pointer-events-auto z-10"
                 title={`Primary failed: ${nodeData.__primaryError ?? "unknown"}\nUsed fallback: ${nodeData.__fallbackModelUsed ?? ""}`}
-              >
-                Fallback used
-              </div>
+              >{tc("Fallback used")}</div>
             )}
             {/* Loading overlay for generation */}
             {nodeData.status === "loading" && (
@@ -658,8 +706,8 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
                 >
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                <span className="text-white text-xs font-medium">Generation failed</span>
-                <span className="text-white/70 text-[10px]">See toast for details</span>
+                <span className="text-white text-xs font-medium">{tc("Generation failed")}</span>
+                <span className="text-white/70 text-[10px]">{tc("See toast for details")}</span>
               </div>
             )}
             {/* Loading overlay for carousel navigation */}
@@ -691,7 +739,7 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
               <button
                 onClick={() => downloadMedia(nodeData.outputImage!, "image").catch(() => {})}
                 className="w-5 h-5 bg-neutral-900/80 hover:bg-neutral-700 rounded flex items-center justify-center text-neutral-400 hover:text-white transition-colors"
-                title="Download image"
+                title={tc("Download image")}
               >
                 <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
@@ -700,7 +748,7 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
               <button
                 onClick={handleClearImage}
                 className="w-5 h-5 bg-neutral-900/80 hover:bg-red-600/80 rounded flex items-center justify-center text-neutral-400 hover:text-white transition-colors"
-                title="Clear image"
+                title={tc("Clear image")}
               >
                 <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -715,7 +763,7 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
                   onClick={handleCarouselPrevious}
                   disabled={isLoadingCarouselImage}
                   className="w-5 h-5 rounded hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-white/70 hover:text-white transition-colors"
-                  title="Previous image"
+                  title={tc("Previous image")}
                 >
                   <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
@@ -728,7 +776,7 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
                   onClick={handleCarouselNext}
                   disabled={isLoadingCarouselImage}
                   className="w-5 h-5 rounded hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-white/70 hover:text-white transition-colors"
-                  title="Next image"
+                  title={tc("Next image")}
                 >
                   <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
@@ -764,9 +812,7 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
                 {nodeData.error || "Failed"}
               </span>
             ) : (
-              <span className="text-neutral-500 text-[10px]">
-                Run to generate
-              </span>
+              <span className="text-neutral-500 text-[10px]">{tc("Run to generate")}</span>
             )}
           </div>
         )}

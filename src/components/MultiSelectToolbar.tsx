@@ -1,25 +1,66 @@
 "use client";
 
+import { useCanvasTranslation } from "../leesfield/localization";
+
 import { useReactFlow } from "@xyflow/react";
-import { useWorkflowStore } from "@/store/workflowStore";
+import { useWorkflowStore } from "../leesfield/upstream-node-host";
 import { useMemo, useCallback } from "react";
-import JSZip from "jszip";
 import type {
   ImageInputNodeData,
   AnnotationNodeData,
   NanoBananaNodeData,
   OutputNodeData,
-} from "@/types";
+} from "../leesfield/upstream-node-host";
 
 const STACK_GAP = 20;
 
-export function MultiSelectToolbar() {
-  const { nodes, onNodesChange, createGroup, removeNodesFromGroup } = useWorkflowStore();
-  const { getViewport } = useReactFlow();
+export type MultiSelectToolbarHostedNode = {
+  id: string;
+  type?: string;
+  position: { x: number; y: number };
+  selected?: boolean;
+  groupId?: string;
+  style?: Record<string, unknown>;
+  measured?: { width?: number; height?: number };
+  width?: number;
+  height?: number;
+  data?: Record<string, unknown>;
+};
+
+export type MultiSelectToolbarHostedProps = {
+  nodes: readonly MultiSelectToolbarHostedNode[];
+  viewport?: { x: number; y: number; zoom: number };
+  writable?: boolean;
+  ariaLabel?: string;
+  onNodesChange: (changes: readonly { type: "position"; id: string; position: { x: number; y: number } }[]) => void;
+  onCopy?: (nodeIds: string[]) => void;
+  onDelete?: (nodeIds: string[]) => void;
+  onCreateGroup?: (nodeIds: string[]) => void;
+  onUngroup?: (nodeIds: string[]) => void;
+  onDownloadImages?: (images: readonly { data: string; name: string }[]) => void | Promise<void>;
+  onDownloadSelected?: (nodeIds: string[]) => void | Promise<void>;
+  downloadingImages?: boolean;
+};
+
+export type MultiSelectToolbarProps = { hosted?: MultiSelectToolbarHostedProps };
+
+function useOptionalReactFlow() {
+  try {
+    return useReactFlow();
+  } catch {
+    return null;
+  }
+}
+
+export function MultiSelectToolbar({ hosted }: MultiSelectToolbarProps = {}) {
+  const tc = useCanvasTranslation();
+  const workflow = useWorkflowStore();
+  const { nodes, onNodesChange: storeOnNodesChange, createGroup, removeNodesFromGroup } = workflow;
+  const reactFlow = useOptionalReactFlow();
 
   const selectedNodes = useMemo(
-    () => nodes.filter((node) => node.selected),
-    [nodes]
+    () => (hosted?.nodes ?? nodes).filter((node) => node.selected),
+    [hosted?.nodes, nodes]
   );
 
   // Check if any selected nodes are in a group
@@ -34,7 +75,7 @@ export function MultiSelectToolbar() {
   const toolbarPosition = useMemo(() => {
     if (selectedNodes.length < 2) return null;
 
-    const viewport = getViewport();
+    const viewport = hosted?.viewport ?? reactFlow?.getViewport() ?? { x: 0, y: 0, zoom: 1 };
 
     // Find bounding box of selected nodes
     let minX = Infinity;
@@ -54,7 +95,9 @@ export function MultiSelectToolbar() {
     const screenY = minY * viewport.zoom + viewport.y - 50; // 50px above the top
 
     return { x: screenX, y: screenY };
-  }, [selectedNodes, getViewport]);
+  }, [hosted?.viewport, reactFlow, selectedNodes]);
+
+  const applyNodeChanges = hosted?.onNodesChange ?? storeOnNodesChange;
 
   const handleStackHorizontally = () => {
     if (selectedNodes.length < 2) return;
@@ -80,7 +123,7 @@ export function MultiSelectToolbar() {
       return change;
     });
 
-    onNodesChange(changes);
+    applyNodeChanges(changes);
   };
 
   const handleStackVertically = () => {
@@ -107,7 +150,7 @@ export function MultiSelectToolbar() {
       return change;
     });
 
-    onNodesChange(changes);
+    applyNodeChanges(changes);
   };
 
   const handleArrangeAsGrid = () => {
@@ -152,20 +195,26 @@ export function MultiSelectToolbar() {
       };
     });
 
-    onNodesChange(changes);
+    applyNodeChanges(changes);
   };
 
   const handleCreateGroup = () => {
     const nodeIds = selectedNodes.map((n) => n.id);
-    createGroup(nodeIds);
+    if (hosted?.onCreateGroup) hosted.onCreateGroup(nodeIds);
+    else createGroup(nodeIds);
   };
 
   const handleUngroup = () => {
     const nodeIds = selectedNodes.map((n) => n.id);
-    removeNodesFromGroup(nodeIds);
+    if (hosted?.onUngroup) hosted.onUngroup(nodeIds);
+    else removeNodesFromGroup(nodeIds);
   };
 
   const handleDownloadImages = useCallback(async () => {
+    if (hosted?.onDownloadSelected) {
+      await hosted.onDownloadSelected(selectedNodes.map((node) => node.id));
+      return;
+    }
     // Extract images from selected nodes based on node type
     const images: { data: string; name: string }[] = [];
 
@@ -197,59 +246,71 @@ export function MultiSelectToolbar() {
 
     if (images.length === 0) return;
 
-    // Create ZIP file
-    const zip = new JSZip();
-    images.forEach(({ data, name }) => {
-      // Remove data URL prefix to get raw base64
-      const base64Data = data.replace(/^data:image\/\w+;base64,/, "");
-      zip.file(name, base64Data, { base64: true });
-    });
-
-    // Generate and download
-    const blob = await zip.generateAsync({ type: "blob" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `images-${Date.now()}.zip`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  }, [selectedNodes]);
+    if (hosted?.onDownloadImages) {
+      await hosted.onDownloadImages(images);
+    }
+  }, [hosted?.onDownloadImages, hosted?.onDownloadSelected, selectedNodes]);
 
   if (!toolbarPosition || selectedNodes.length < 2) return null;
 
   return (
     <div
       className="fixed z-[100] flex items-center gap-1 bg-neutral-800 border border-neutral-600 rounded-lg shadow-xl p-1"
+      role="toolbar"
+      aria-label={hosted?.ariaLabel ?? "Selected nodes"}
+      data-node-banana-component="MultiSelectToolbar"
       style={{
         left: toolbarPosition.x,
         top: toolbarPosition.y,
         transform: "translateX(-50%)",
       }}
     >
+      {hosted ? <span className="px-1.5 text-[10px] text-neutral-300">{selectedNodes.length}{" "}{tc("selected")}</span> : null}
+      {hosted?.onCopy ? (
+        <button
+          type="button"
+          onClick={() => hosted.onCopy?.(selectedNodes.map((node) => node.id))}
+          disabled={hosted.writable === false}
+          className="rounded px-1.5 py-1 text-[10px] text-neutral-300 transition-colors hover:bg-neutral-700 hover:text-neutral-100 disabled:cursor-not-allowed disabled:opacity-40"
+        >{tc("Copy")}</button>
+      ) : null}
+      {hosted?.onDelete ? (
+        <button
+          type="button"
+          onClick={() => hosted.onDelete?.(selectedNodes.map((node) => node.id))}
+          disabled={hosted.writable === false}
+          className="rounded px-1.5 py-1 text-[10px] text-neutral-300 transition-colors hover:bg-neutral-700 hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-40"
+        >{tc("Delete")}</button>
+      ) : null}
+      {hosted?.onCopy || hosted?.onDelete ? <div className="w-px h-4 bg-neutral-600 mx-0.5" /> : null}
       <button
+        type="button"
         onClick={handleStackHorizontally}
+        disabled={hosted?.writable === false}
         className="p-1.5 rounded hover:bg-neutral-700 text-neutral-400 hover:text-neutral-100 transition-colors"
-        title="Stack horizontally (H)"
+        title={tc("Stack horizontally (H)")}
       >
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M6 4h4v16H6zM14 4h4v16h-4z" />
         </svg>
       </button>
       <button
+        type="button"
         onClick={handleStackVertically}
+        disabled={hosted?.writable === false}
         className="p-1.5 rounded hover:bg-neutral-700 text-neutral-400 hover:text-neutral-100 transition-colors"
-        title="Stack vertically (V)"
+        title={tc("Stack vertically (V)")}
       >
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16v4H4zM4 14h16v4H4z" />
         </svg>
       </button>
       <button
+        type="button"
         onClick={handleArrangeAsGrid}
+        disabled={hosted?.writable === false}
         className="p-1.5 rounded hover:bg-neutral-700 text-neutral-400 hover:text-neutral-100 transition-colors"
-        title="Arrange as grid (G)"
+        title={tc("Arrange as grid (G)")}
       >
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
@@ -262,9 +323,11 @@ export function MultiSelectToolbar() {
       {/* Group/Ungroup buttons */}
       {someInGroup ? (
         <button
+          type="button"
           onClick={handleUngroup}
+          disabled={hosted?.writable === false || (hosted != null && !hosted.onUngroup)}
           className="p-1.5 rounded hover:bg-neutral-700 text-neutral-400 hover:text-neutral-100 transition-colors"
-          title="Remove from group"
+          title={tc("Remove from group")}
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25" />
@@ -272,9 +335,11 @@ export function MultiSelectToolbar() {
         </button>
       ) : (
         <button
+          type="button"
           onClick={handleCreateGroup}
+          disabled={hosted?.writable === false || (hosted != null && !hosted.onCreateGroup)}
           className="p-1.5 rounded hover:bg-neutral-700 text-neutral-400 hover:text-neutral-100 transition-colors"
-          title="Create group"
+          title={tc("Create group")}
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 7.125C2.25 6.504 2.754 6 3.375 6h6c.621 0 1.125.504 1.125 1.125v3.75c0 .621-.504 1.125-1.125 1.125h-6a1.125 1.125 0 01-1.125-1.125v-3.75zM14.25 8.625c0-.621.504-1.125 1.125-1.125h5.25c.621 0 1.125.504 1.125 1.125v8.25c0 .621-.504 1.125-1.125 1.125h-5.25a1.125 1.125 0 01-1.125-1.125v-8.25zM3.75 16.125c0-.621.504-1.125 1.125-1.125h5.25c.621 0 1.125.504 1.125 1.125v2.25c0 .621-.504 1.125-1.125 1.125h-5.25a1.125 1.125 0 01-1.125-1.125v-2.25z" />
@@ -287,9 +352,12 @@ export function MultiSelectToolbar() {
 
       {/* Download images button */}
       <button
+        type="button"
         onClick={handleDownloadImages}
+        disabled={hosted?.writable === false || hosted?.downloadingImages || (hosted != null && !hosted.onDownloadImages && !hosted.onDownloadSelected)}
+        aria-busy={hosted?.downloadingImages || undefined}
         className="p-1.5 rounded hover:bg-neutral-700 text-neutral-400 hover:text-neutral-100 transition-colors"
-        title="Download images as ZIP"
+        title={tc("Download images as ZIP")}
       >
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />

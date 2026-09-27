@@ -1,19 +1,27 @@
 "use client";
+import { CanvasInput } from "../../leesfield/inputs";
+
+
+import { useCanvasTranslation } from "../../leesfield/localization";
+import { Handle } from "../../leesfield/port-handle";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Handle, Position, NodeProps, Node } from "@xyflow/react";
+import { Position, NodeProps, Node } from "@xyflow/react";
 import { BaseNode } from "./BaseNode";
-import { useWorkflowStore } from "@/store/workflowStore";
-import { VideoStitchNodeData } from "@/types";
-import { checkEncoderSupport } from "@/hooks/useStitchVideos";
-import { useVideoBlobUrl } from "@/hooks/useVideoBlobUrl";
-import { useVideoAutoplay } from "@/hooks/useVideoAutoplay";
-import { useShowHandleLabels } from "@/hooks/useShowHandleLabels";
 import { HandleLabel } from "./HandleLabel";
+import {
+  VideoStitchNodeData,
+  checkEncoderSupport,
+  useShowHandleLabels,
+  useVideoAutoplay,
+  useVideoBlobUrl,
+  useWorkflowStore,
+} from "../../leesfield/upstream-node-host";
 
 type VideoStitchNodeType = Node<VideoStitchNodeData, "videoStitch">;
 
 export function VideoStitchNode({ id, data, selected }: NodeProps<VideoStitchNodeType>) {
+  const tc = useCanvasTranslation();
   const nodeData = data;
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
   const edges = useWorkflowStore((state) => state.edges);
@@ -21,6 +29,7 @@ export function VideoStitchNode({ id, data, selected }: NodeProps<VideoStitchNod
   const [thumbnails, setThumbnails] = useState<Map<string, string>>(new Map());
   const regenerateNode = useWorkflowStore((state) => state.regenerateNode);
   const isRunning = useWorkflowStore((state) => state.isRunning);
+  const writable = useWorkflowStore((state) => state.writable);
   const removeEdge = useWorkflowStore((state) => state.removeEdge);
   const videoBlobUrl = useVideoBlobUrl(nodeData.outputVideo ?? null);
   const videoAutoplayRef = useVideoAutoplay(id, selected);
@@ -81,7 +90,9 @@ export function VideoStitchNode({ id, data, selected }: NodeProps<VideoStitchNod
       let videoData: string | null = null;
       let duration: number | null = null;
 
-      if (sourceNode.type === "generateVideo" || sourceNode.type === "easeCurve" || sourceNode.type === "videoStitch" || sourceNode.type === "videoTrim") {
+      if (sourceNode.type === "videoInput") {
+        videoData = (sourceNode.data as any).video || null;
+      } else if (sourceNode.type === "generateVideo" || sourceNode.type === "easeCurve" || sourceNode.type === "videoStitch" || sourceNode.type === "videoTrim") {
         videoData = (sourceNode.data as any).outputVideo || null;
       }
 
@@ -101,7 +112,7 @@ export function VideoStitchNode({ id, data, selected }: NodeProps<VideoStitchNod
 
       // Append any new edges not in clipOrder yet
       videoEdges.forEach((edge) => {
-        if (!nodeData.clipOrder.includes(edge.id)) {
+        if (!nodeData.clipOrder?.includes(edge.id)) {
           const clip = clipMap.get(edge.id);
           if (clip) {
             ordered.push({ edgeId: edge.id, ...clip });
@@ -356,7 +367,7 @@ export function VideoStitchNode({ id, data, selected }: NodeProps<VideoStitchNod
         isConnectable={true}
         style={{ top: "90%", background: "rgb(167, 139, 250)" }}
       />
-      <HandleLabel label="Audio" side="target" color="rgb(167, 139, 250)" top="calc(90% - 18px)" visible={showLabels} />
+      <HandleLabel label={tc("Audio")} side="target" color="rgb(167, 139, 250)" top="calc(90% - 18px)" visible={showLabels} />
 
       {/* Video output handle (right side) */}
       <Handle
@@ -366,7 +377,7 @@ export function VideoStitchNode({ id, data, selected }: NodeProps<VideoStitchNod
         data-handletype="video"
         isConnectable={true}
       />
-      <HandleLabel label="Output" side="source" color="var(--handle-color-video)" top="calc(50% - 9px)" visible={showLabels} />
+      <HandleLabel label={tc("Output")} side="source" color="var(--handle-color-video)" top="calc(50% - 9px)" visible={showLabels} />
     </>
   );
 
@@ -384,9 +395,7 @@ export function VideoStitchNode({ id, data, selected }: NodeProps<VideoStitchNod
           <svg className="w-8 h-8 text-neutral-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
           </svg>
-          <span className="text-xs text-neutral-400">
-            Your browser doesn't support video encoding.
-          </span>
+          <span className="text-xs text-neutral-400">{tc("Your browser doesn't support video encoding.")}</span>
           <a
             href="https://discord.com/invite/89Nr6EKkTf"
             target="_blank"
@@ -431,7 +440,7 @@ export function VideoStitchNode({ id, data, selected }: NodeProps<VideoStitchNod
                 d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
               />
             </svg>
-            <span className="text-xs">Checking encoder...</span>
+            <span className="text-xs">{tc("Checking encoder...")}</span>
           </div>
         </div>
       </BaseNode>
@@ -455,7 +464,7 @@ export function VideoStitchNode({ id, data, selected }: NodeProps<VideoStitchNod
         <div className="shrink-0 flex flex-col gap-2">
           {orderedClips.length === 0 ? (
             <div className="h-16 flex items-center justify-center border border-dashed border-neutral-600 rounded">
-              <span className="text-[10px] text-neutral-500">Connect videos to stitch</span>
+              <span className="text-[10px] text-neutral-500">{tc("Connect videos to stitch")}</span>
             </div>
           ) : (
             <>
@@ -482,6 +491,7 @@ export function VideoStitchNode({ id, data, selected }: NodeProps<VideoStitchNod
                         <img
                           src={thumbnail}
                           alt={`Clip ${clip.edgeId}`}
+                          draggable={false}
                           className="w-full h-full object-contain rounded"
                         />
                       ) : (
@@ -520,7 +530,7 @@ export function VideoStitchNode({ id, data, selected }: NodeProps<VideoStitchNod
                       <button
                         onClick={() => handleRemoveClip(clip.edgeId)}
                         className="absolute top-0.5 right-0.5 w-4 h-4 bg-red-600/80 hover:bg-red-500 rounded text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
-                        title="Disconnect"
+                        title={tc("Disconnect")}
                       >
                         <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -557,7 +567,7 @@ export function VideoStitchNode({ id, data, selected }: NodeProps<VideoStitchNod
                 d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
               />
             </svg>
-            <span className="text-white text-xs">Processing... {Math.round(nodeData.progress)}%</span>
+            <span className="text-white text-xs">{tc("Processing...")}{Math.round(nodeData.progress)}%</span>
           </div>
         )}
 
@@ -576,7 +586,7 @@ export function VideoStitchNode({ id, data, selected }: NodeProps<VideoStitchNod
             <button
               onClick={() => updateNodeData(id, { outputVideo: null, status: "idle" })}
               className="absolute top-1 right-1 w-5 h-5 bg-neutral-900/80 hover:bg-red-600/80 rounded flex items-center justify-center text-neutral-400 hover:text-white transition-colors"
-              title="Clear video"
+              title={tc("Clear video")}
             >
               <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -588,8 +598,17 @@ export function VideoStitchNode({ id, data, selected }: NodeProps<VideoStitchNod
         {/* Controls row: Loop selector + Stitch button (below video, right-aligned) */}
         {orderedClips.length > 0 && (
           <div className="shrink-0 flex items-center justify-end gap-2">
+            <label className="nodrag flex items-center gap-1.5 text-[10px] text-neutral-400">
+              <CanvasInput
+                type="checkbox"
+                aria-label={tc("Strip audio")}
+                checked={nodeData.stripAudio === true}
+                disabled={!writable || nodeData.status === "loading" || isRunning}
+                onChange={(event) => updateNodeData(id, { stripAudio: event.target.checked })}
+                className="nodrag h-3 w-3 accent-blue-500"
+              />{tc("Strip audio")}</label>
             <div className="flex items-center gap-1">
-              <span className="text-[10px] text-neutral-400">Loop</span>
+              <span className="text-[10px] text-neutral-400">{tc("Loop")}</span>
               {([1, 2, 3] as const).map((count) => (
                 <button
                   key={count}
@@ -610,7 +629,7 @@ export function VideoStitchNode({ id, data, selected }: NodeProps<VideoStitchNod
               disabled={orderedClips.length < 2 || nodeData.status === "loading" || isRunning}
               className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-neutral-700 disabled:text-neutral-500 disabled:cursor-not-allowed rounded text-white text-xs font-medium transition-colors"
             >
-              {nodeData.status === "loading" ? "Processing..." : "Stitch"}
+              {nodeData.status === "loading" ? tc("Processing...") : tc("Stitch")}
             </button>
           </div>
         )}

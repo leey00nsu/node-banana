@@ -1,6 +1,8 @@
 "use client";
 
-import { useTypewriter } from "@/hooks/useTypewriter";
+import { useCanvasTranslation } from "../../leesfield/localization";
+
+import { useTypewriter } from "../../hooks/useTypewriter";
 
 interface TutorialLink {
   text: string;
@@ -19,6 +21,7 @@ interface TutorialMessageProps {
  * Positioned based on the position prop (left, right, center, or top-center).
  */
 export function TutorialMessage({ message, position = "center", waitForClick = false, links }: TutorialMessageProps) {
+  const tc = useCanvasTranslation();
   const { displayedText } = useTypewriter(message, 25);
 
   const positionClasses = {
@@ -29,7 +32,7 @@ export function TutorialMessage({ message, position = "center", waitForClick = f
   };
 
   return (
-    <div className={`absolute ${positionClasses[position]} max-w-sm px-6 py-4 bg-neutral-800/95 backdrop-blur rounded-lg shadow-xl transition-opacity duration-300 opacity-100 pointer-events-auto`}>
+    <div className={`absolute ${positionClasses[position]} w-[min(24rem,calc(100vw-2rem))] max-w-sm px-6 py-4 bg-neutral-800/95 backdrop-blur rounded-lg shadow-xl transition-opacity duration-300 opacity-100 pointer-events-auto`}>
       <p className="text-neutral-100 text-base leading-relaxed text-center whitespace-pre-line">{displayedText}</p>
       {links && links.length > 0 && (
         <div className="mt-3 flex flex-col gap-2">
@@ -47,9 +50,7 @@ export function TutorialMessage({ message, position = "center", waitForClick = f
         </div>
       )}
       {waitForClick && (
-        <p className="mt-3 text-xs text-neutral-400 text-center italic">
-          Click anywhere to continue
-        </p>
+        <p className="mt-3 text-xs text-neutral-400 text-center italic">{tc("Click anywhere to continue")}</p>
       )}
     </div>
   );

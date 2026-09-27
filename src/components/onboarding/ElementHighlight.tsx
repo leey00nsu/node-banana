@@ -99,7 +99,7 @@ export function ElementHighlight({ selector, onComplete }: ElementHighlightProps
             left: rect.left - 4,
             width: rect.width + 8,
             height: rect.height + 8,
-            zIndex: 101,
+            zIndex: 201,
             border: "2px solid rgb(59, 130, 246)",
             borderRadius: "8px",
             boxShadow: "0 0 8px rgba(59, 130, 246, 0.3)",

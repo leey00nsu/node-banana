@@ -1,15 +1,22 @@
 "use client";
+import { CanvasInput, CanvasRange } from "../../leesfield/inputs";
+
+
+import { useCanvasTranslation } from "../../leesfield/localization";
+import { Handle } from "../../leesfield/port-handle";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Handle, Position, NodeProps, Node } from "@xyflow/react";
+import { Position, NodeProps, Node } from "@xyflow/react";
 import { BaseNode } from "./BaseNode";
-import { useWorkflowStore } from "@/store/workflowStore";
-import { VideoTrimNodeData } from "@/types";
-import { checkEncoderSupport } from "@/hooks/useStitchVideos";
-import { useVideoBlobUrl } from "@/hooks/useVideoBlobUrl";
-import { useVideoAutoplay } from "@/hooks/useVideoAutoplay";
-import { useShowHandleLabels } from "@/hooks/useShowHandleLabels";
 import { HandleLabel } from "./HandleLabel";
+import {
+  VideoTrimNodeData,
+  checkEncoderSupport,
+  useShowHandleLabels,
+  useVideoAutoplay,
+  useVideoBlobUrl,
+  useWorkflowStore,
+} from "../../leesfield/upstream-node-host";
 
 type VideoTrimNodeType = Node<VideoTrimNodeData, "videoTrim">;
 
@@ -23,10 +30,12 @@ function formatTime(seconds: number): string {
 }
 
 export function VideoTrimNode({ id, data, selected }: NodeProps<VideoTrimNodeType>) {
+  const tc = useCanvasTranslation();
   const nodeData = data;
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
   const regenerateNode = useWorkflowStore((state) => state.regenerateNode);
   const isRunning = useWorkflowStore((state) => state.isRunning);
+  const writable = useWorkflowStore((state) => state.writable);
   const edges = useWorkflowStore((state) => state.edges);
   const nodes = useWorkflowStore((state) => state.nodes);
 
@@ -131,24 +140,6 @@ export function VideoTrimNode({ id, data, selected }: NodeProps<VideoTrimNodeTyp
   const endTime = nodeData.endTime > 0 ? nodeData.endTime : duration;
   const trimDuration = Math.max(0, endTime - startTime);
 
-  const handleStartChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const val = parseFloat(e.target.value);
-      const clamped = Math.min(val, endTime - 0.1);
-      updateNodeData(id, { startTime: Math.max(0, clamped) });
-    },
-    [id, updateNodeData, endTime]
-  );
-
-  const handleEndChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const val = parseFloat(e.target.value);
-      const clamped = Math.max(val, startTime + 0.1);
-      updateNodeData(id, { endTime: Math.min(duration > 0 ? duration : clamped, clamped) });
-    },
-    [id, updateNodeData, startTime, duration]
-  );
-
   const handleTrim = useCallback(() => {
     regenerateNode(id);
   }, [id, regenerateNode]);
@@ -161,8 +152,6 @@ export function VideoTrimNode({ id, data, selected }: NodeProps<VideoTrimNodeTyp
   const previewBlobUrl = useVideoBlobUrl(previewUrl);
 
   // Compute slider thumb position percentages for the visual range highlight
-  const startPct = duration > 0 ? (startTime / duration) * 100 : 0;
-  const endPct = duration > 0 ? (endTime / duration) * 100 : 100;
 
   // Shared handles rendered in ALL states
   const renderHandles = () => (
@@ -176,7 +165,7 @@ export function VideoTrimNode({ id, data, selected }: NodeProps<VideoTrimNodeTyp
         isConnectable={true}
         style={{ top: "50%" }}
       />
-      <HandleLabel label="Video In" side="target" color="var(--handle-color-video)" top="calc(50% - 7px)" visible={showLabels} />
+      <HandleLabel label={tc("Video In")} side="target" color="var(--handle-color-video)" top="calc(50% - 7px)" visible={showLabels} />
 
       {/* Video Out (source, right, 50%) */}
       <Handle
@@ -187,7 +176,7 @@ export function VideoTrimNode({ id, data, selected }: NodeProps<VideoTrimNodeTyp
         isConnectable={true}
         style={{ top: "50%" }}
       />
-      <HandleLabel label="Video Out" side="source" color="var(--handle-color-video)" top="calc(50% - 7px)" visible={showLabels} />
+      <HandleLabel label={tc("Video Out")} side="source" color="var(--handle-color-video)" top="calc(50% - 7px)" visible={showLabels} />
     </>
   );
 
@@ -206,9 +195,7 @@ export function VideoTrimNode({ id, data, selected }: NodeProps<VideoTrimNodeTyp
           <svg className="w-8 h-8 text-neutral-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
           </svg>
-          <span className="text-xs text-neutral-400">
-            Your browser doesn&apos;t support video encoding.
-          </span>
+          <span className="text-xs text-neutral-400">{tc("Your browser doesn&apos;t support video encoding.")}</span>
           <a
             href="https://discord.com/invite/89Nr6EKkTf"
             target="_blank"
@@ -238,7 +225,7 @@ export function VideoTrimNode({ id, data, selected }: NodeProps<VideoTrimNodeTyp
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
             </svg>
-            <span className="text-xs">Checking encoder...</span>
+            <span className="text-xs">{tc("Checking encoder...")}</span>
           </div>
         </div>
       </BaseNode>
@@ -273,7 +260,7 @@ export function VideoTrimNode({ id, data, selected }: NodeProps<VideoTrimNodeTyp
             />
           ) : (
             <div className="absolute inset-0 flex items-center justify-center border border-dashed border-neutral-600 rounded">
-              <span className="text-[10px] text-neutral-500">Connect a video to trim</span>
+              <span className="text-[10px] text-neutral-500">{tc("Connect a video to trim")}</span>
             </div>
           )}
 
@@ -287,9 +274,7 @@ export function VideoTrimNode({ id, data, selected }: NodeProps<VideoTrimNodeTyp
                     ? "bg-neutral-700 text-neutral-200"
                     : "bg-neutral-900/70 text-neutral-500 hover:text-neutral-300"
                 }`}
-              >
-                Source
-              </button>
+              >{tc("Source")}</button>
               <button
                 onClick={() => setShowOutput(true)}
                 className={`px-1.5 py-0.5 rounded text-[9px] font-medium transition-colors ${
@@ -297,9 +282,7 @@ export function VideoTrimNode({ id, data, selected }: NodeProps<VideoTrimNodeTyp
                     ? "bg-blue-600 text-white"
                     : "bg-neutral-900/70 text-neutral-500 hover:text-neutral-300"
                 }`}
-              >
-                Trimmed
-              </button>
+              >{tc("Trimmed")}</button>
             </div>
           )}
 
@@ -311,7 +294,7 @@ export function VideoTrimNode({ id, data, selected }: NodeProps<VideoTrimNodeTyp
                 setShowOutput(false);
               }}
               className="absolute top-1 right-1 w-5 h-5 bg-neutral-900/80 hover:bg-red-600/80 rounded flex items-center justify-center text-neutral-400 hover:text-white transition-colors"
-              title="Clear trimmed video"
+              title={tc("Clear trimmed video")}
             >
               <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -324,78 +307,20 @@ export function VideoTrimNode({ id, data, selected }: NodeProps<VideoTrimNodeTyp
         {hasSourceVideo && (
           <div className="shrink-0 flex flex-col gap-1.5 px-1">
             {/* Dual range slider */}
-            <div className="nodrag nowheel relative h-5 flex items-center trim-slider-container">
-              {/* Make only the slider thumbs interactive, not the full-width invisible input bodies */}
-              <style>{`
-                .trim-slider-container input[type="range"] {
-                  pointer-events: none;
-                }
-                .trim-slider-container input[type="range"]::-webkit-slider-thumb {
-                  pointer-events: all;
-                  cursor: pointer;
-                }
-                .trim-slider-container input[type="range"]::-moz-range-thumb {
-                  pointer-events: all;
-                  cursor: pointer;
-                }
-              `}</style>
-
-              {/* Track background */}
-              <div className="absolute left-0 right-0 h-1.5 bg-neutral-700 rounded-full" />
-
-              {/* Highlighted trim range */}
-              <div
-                className="absolute h-1.5 bg-blue-500/60 rounded-full pointer-events-none"
-                style={{ left: `${startPct}%`, right: `${100 - endPct}%` }}
-              />
-
-              {/* Start slider (higher z-index so it's draggable when both thumbs overlap at 0) */}
-              <input
-                type="range"
-                min={0}
-                max={duration > 0 ? duration : 100}
-                step={0.1}
-                value={startTime}
-                onChange={handleStartChange}
-                className="absolute w-full h-full opacity-0 nodrag"
-                style={{ zIndex: 3 }}
-              />
-
-              {/* End slider */}
-              <input
-                type="range"
-                min={0}
-                max={duration > 0 ? duration : 100}
-                step={0.1}
-                value={endTime}
-                onChange={handleEndChange}
-                className="absolute w-full h-full opacity-0 nodrag"
-                style={{ zIndex: 2 }}
-              />
-
-              {/* Visual thumb indicators */}
-              <div
-                className="absolute w-3 h-3 bg-white rounded-full border-2 border-blue-500 pointer-events-none"
-                style={{ left: `calc(${startPct}% - 6px)`, zIndex: 4 }}
-              />
-              <div
-                className="absolute w-3 h-3 bg-white rounded-full border-2 border-blue-500 pointer-events-none"
-                style={{ left: `calc(${endPct}% - 6px)`, zIndex: 4 }}
-              />
-            </div>
+            <CanvasRange disabled={!writable || nodeData.status === "loading" || isRunning} value={[startTime,endTime]} min={0} max={duration > 0 ? duration : 100} step={0.1} labels={[tc("Start"),tc("End")]} onValueChange={([start,end])=>updateNodeData(id,{startTime:Math.max(0,Math.min(start,end-0.1)),endTime:Math.max(end,start+0.1)})} />
 
             {/* Time labels */}
             <div className="flex items-center justify-between">
               <div className="flex flex-col items-start">
-                <span className="text-[10px] text-neutral-400">Start</span>
+                <span className="text-[10px] text-neutral-400">{tc("Start")}</span>
                 <span className="text-[11px] text-neutral-200 font-mono">{formatTime(startTime)}</span>
               </div>
               <div className="flex flex-col items-center">
-                <span className="text-[10px] text-neutral-400">Duration</span>
+                <span className="text-[10px] text-neutral-400">{tc("Duration")}</span>
                 <span className="text-[11px] text-neutral-200 font-mono">{formatTime(trimDuration)}</span>
               </div>
               <div className="flex flex-col items-end">
-                <span className="text-[10px] text-neutral-400">End</span>
+                <span className="text-[10px] text-neutral-400">{tc("End")}</span>
                 <span className="text-[11px] text-neutral-200 font-mono">{formatTime(endTime)}</span>
               </div>
             </div>
@@ -403,13 +328,22 @@ export function VideoTrimNode({ id, data, selected }: NodeProps<VideoTrimNodeTyp
         )}
 
         {/* Trim button */}
-        <div className="shrink-0 flex justify-end px-1">
+        <div className="shrink-0 flex items-center justify-end gap-3 px-1">
+          <label className="nodrag flex items-center gap-1.5 text-[10px] text-neutral-400">
+            <CanvasInput
+              type="checkbox"
+              aria-label={tc("Strip audio")}
+              checked={nodeData.stripAudio === true}
+              disabled={!writable || nodeData.status === "loading" || isRunning}
+              onChange={(event) => updateNodeData(id, { stripAudio: event.target.checked })}
+              className="nodrag h-3 w-3 accent-blue-500"
+            />{tc("Strip audio")}</label>
           <button
             onClick={handleTrim}
             disabled={!canTrim || nodeData.status === "loading" || isRunning}
             className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-neutral-700 disabled:text-neutral-500 disabled:cursor-not-allowed rounded text-white text-xs font-medium transition-colors"
           >
-            {nodeData.status === "loading" ? "Processing..." : "Trim"}
+            {nodeData.status === "loading" ? tc("Processing...") : tc("Trim")}
           </button>
         </div>
 
@@ -420,7 +354,7 @@ export function VideoTrimNode({ id, data, selected }: NodeProps<VideoTrimNodeTyp
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
             </svg>
-            <span className="text-white text-xs">Processing... {Math.round(nodeData.progress)}%</span>
+            <span className="text-white text-xs">{tc("Processing...")}{Math.round(nodeData.progress)}%</span>
           </div>
         )}
 

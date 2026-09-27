@@ -1,5 +1,7 @@
 "use client";
 
+import { useCanvasTranslation } from "../../leesfield/localization";
+
 import { useState, useEffect } from "react";
 import { FTUXStepProps } from "@/types/ftux";
 import { NodeDefaultsConfig } from "@/types";
@@ -52,6 +54,7 @@ const getProviderIcon = (provider: string) => {
 };
 
 export function FTUXModelDefaultsStep({}: FTUXStepProps) {
+  const tc = useCanvasTranslation();
   const [localDefaults, setLocalDefaults] = useState<NodeDefaultsConfig>({});
   const [showImageDialog, setShowImageDialog] = useState(false);
   const [showVideoDialog, setShowVideoDialog] = useState(false);
@@ -89,9 +92,7 @@ export function FTUXModelDefaultsStep({}: FTUXStepProps) {
                     type="button"
                     onClick={() => setShowImageDialog(true)}
                     className="px-2 py-1 text-xs bg-neutral-700 hover:bg-neutral-600 text-neutral-200 rounded transition-colors"
-                  >
-                    Change
-                  </button>
+                  >{tc("Change")}</button>
                   <button
                     type="button"
                     onClick={() => {
@@ -100,20 +101,16 @@ export function FTUXModelDefaultsStep({}: FTUXStepProps) {
                       saveNodeDefaults(rest);
                     }}
                     className="text-xs text-neutral-400 hover:text-neutral-200"
-                  >
-                    Clear
-                  </button>
+                  >{tc("Clear")}</button>
                 </>
               ) : (
                 <>
-                  <span className="text-xs text-neutral-400">None set</span>
+                  <span className="text-xs text-neutral-400">{tc("None set")}</span>
                   <button
                     type="button"
                     onClick={() => setShowImageDialog(true)}
                     className="px-2 py-1 text-xs bg-neutral-700 hover:bg-neutral-600 text-neutral-200 rounded transition-colors"
-                  >
-                    Select
-                  </button>
+                  >{tc("Select")}</button>
                 </>
               )}
             </div>
@@ -137,9 +134,7 @@ export function FTUXModelDefaultsStep({}: FTUXStepProps) {
                     type="button"
                     onClick={() => setShowVideoDialog(true)}
                     className="px-2 py-1 text-xs bg-neutral-700 hover:bg-neutral-600 text-neutral-200 rounded transition-colors"
-                  >
-                    Change
-                  </button>
+                  >{tc("Change")}</button>
                   <button
                     type="button"
                     onClick={() => {
@@ -148,20 +143,16 @@ export function FTUXModelDefaultsStep({}: FTUXStepProps) {
                       saveNodeDefaults(rest);
                     }}
                     className="text-xs text-neutral-400 hover:text-neutral-200"
-                  >
-                    Clear
-                  </button>
+                  >{tc("Clear")}</button>
                 </>
               ) : (
                 <>
-                  <span className="text-xs text-neutral-400">None set</span>
+                  <span className="text-xs text-neutral-400">{tc("None set")}</span>
                   <button
                     type="button"
                     onClick={() => setShowVideoDialog(true)}
                     className="px-2 py-1 text-xs bg-neutral-700 hover:bg-neutral-600 text-neutral-200 rounded transition-colors"
-                  >
-                    Select
-                  </button>
+                  >{tc("Select")}</button>
                 </>
               )}
             </div>

@@ -1,7 +1,10 @@
 "use client";
 
+import { useCanvasTranslation } from "../../leesfield/localization";
+import { Handle } from "../../leesfield/port-handle";
+
 import { memo, useMemo, useEffect } from "react";
-import { Handle, Position, useUpdateNodeInternals, useReactFlow, NodeProps } from "@xyflow/react";
+import { Position, useUpdateNodeInternals, useReactFlow, NodeProps } from "@xyflow/react";
 import { BaseNode } from "./BaseNode";
 import { useWorkflowStore } from "@/store/workflowStore";
 import type { WorkflowNode, RouterNodeData } from "@/types";
@@ -18,6 +21,7 @@ const HANDLE_COLORS: Record<(typeof ALL_HANDLE_TYPES)[number], string> = {
 };
 
 export const RouterNode = memo(({ id, data, selected }: NodeProps<WorkflowNode>) => {
+  const tc = useCanvasTranslation();
   const nodeData = data as RouterNodeData;
   const edges = useWorkflowStore((state) => state.edges);
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
@@ -130,7 +134,7 @@ export const RouterNode = memo(({ id, data, selected }: NodeProps<WorkflowNode>)
       <div className="text-[10px] text-neutral-500 text-center py-1">
         {activeInputTypes.length > 0
           ? `${activeInputTypes.length} type${activeInputTypes.length !== 1 ? "s" : ""} routed`
-          : "Drop connections here"}
+          : tc("Drop connections here")}
       </div>
     </BaseNode>
   );

@@ -1,5 +1,7 @@
 "use client";
 
+import { useCanvasTranslation } from "../../leesfield/localization";
+
 import { useState } from "react";
 import { FTUXModalProps, FTUXStep } from "@/types/ftux";
 import { setFTUXCompleted } from "@/store/utils/localStorage";
@@ -9,6 +11,7 @@ import { FTUXModelDefaultsStep } from "./FTUXModelDefaultsStep";
 import { FTUXReadyStep } from "./FTUXReadyStep";
 
 export function FTUXModal({ onComplete, onStartTutorial }: FTUXModalProps) {
+  const tc = useCanvasTranslation();
   const [currentStep, setCurrentStep] = useState<FTUXStep>(1);
   const [showSkipConfirm, setShowSkipConfirm] = useState(false);
 
@@ -78,7 +81,7 @@ export function FTUXModal({ onComplete, onStartTutorial }: FTUXModalProps) {
                 type="button"
                 onClick={() => setShowSkipConfirm(true)}
                 className="text-neutral-400 hover:text-neutral-100 transition-colors"
-                aria-label="Close"
+                aria-label={tc("Close")}
               >
                 <svg
                   className="w-5 h-5"
@@ -161,16 +164,12 @@ export function FTUXModal({ onComplete, onStartTutorial }: FTUXModalProps) {
                   type="button"
                   onClick={() => setShowSkipConfirm(false)}
                   className="px-4 py-2 text-sm text-neutral-400 hover:text-neutral-100 transition-colors"
-                >
-                  Cancel
-                </button>
+                >{tc("Cancel")}</button>
                 <button
                   type="button"
                   onClick={handleSkip}
                   className="px-4 py-2 text-sm bg-white text-neutral-900 rounded-lg hover:bg-neutral-200 transition-colors"
-                >
-                  Skip
-                </button>
+                >{tc("Skip")}</button>
               </div>
             </div>
           </div>

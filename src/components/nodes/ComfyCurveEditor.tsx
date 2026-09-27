@@ -1,5 +1,7 @@
 "use client";
 
+import { useCanvasTranslation } from "../../leesfield/localization";
+
 import React, { useCallback, useMemo, useRef, useState } from "react";
 
 import {
@@ -36,6 +38,7 @@ const DIVISIONS = 4;
  * pointer and the canvas pans instead of the point moving.
  */
 function ComfyCurveEditorInner({ label, value, onChange, description }: ComfyCurveEditorProps) {
+  const tc = useCanvasTranslation();
   const svgRef = useRef<SVGSVGElement>(null);
   const [dragging, setDragging] = useState<number | null>(null);
   const curve = useMemo(() => normalizeCurve(value), [value]);
@@ -97,13 +100,11 @@ function ComfyCurveEditorInner({ label, value, onChange, description }: ComfyCur
         </label>
         <button
           type="button"
-          title="Reset this curve"
+          title={tc("Reset this curve")}
           disabled={isIdentityCurve(curve)}
           onClick={() => onChange(IDENTITY_CURVE)}
           className="nodrag nopan text-[9px] text-neutral-500 hover:text-neutral-200 disabled:opacity-30 disabled:hover:text-neutral-500 transition-colors"
-        >
-          Reset
-        </button>
+        >{tc("Reset")}</button>
       </div>
       <svg
         ref={svgRef}
@@ -169,14 +170,12 @@ function ComfyCurveEditorInner({ label, value, onChange, description }: ComfyCur
                 onChange(removeCurvePoint(curve, index));
               }}
             >
-              {locked && <title>Endpoint — moves vertically only</title>}
+              {locked && <title>{tc("Endpoint — moves vertically only")}</title>}
             </circle>
           );
         })}
       </svg>
-      <span className="text-[9px] text-neutral-600">
-        Click to add · drag to shape · double-click a point to remove
-      </span>
+      <span className="text-[9px] text-neutral-600">{tc("Click to add · drag to shape · double-click a point to remove")}</span>
     </div>
   );
 }

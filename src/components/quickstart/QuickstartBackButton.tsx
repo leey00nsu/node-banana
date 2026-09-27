@@ -1,5 +1,6 @@
 "use client";
 
+import { useCanvasTranslation } from "../../leesfield/localization";
 interface QuickstartBackButtonProps {
   onClick: () => void;
   disabled?: boolean;
@@ -9,6 +10,7 @@ export function QuickstartBackButton({
   onClick,
   disabled = false,
 }: QuickstartBackButtonProps) {
+  const tc = useCanvasTranslation();
   return (
     <button
       onClick={onClick}
@@ -32,7 +34,7 @@ export function QuickstartBackButton({
           d="M10 19l-7-7m0 0l7-7m-7 7h18"
         />
       </svg>
-      <span>Back</span>
+      <span>{tc("Back")}</span>
     </button>
   );
 }

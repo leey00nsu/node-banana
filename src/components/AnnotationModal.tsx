@@ -1,18 +1,20 @@
 "use client";
 
+import { useCanvasTranslation } from "../leesfield/localization";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Stage, Layer, Image as KonvaImage, Rect, Ellipse, Arrow, Line, Text, Transformer } from "react-konva";
-import { useAnnotationStore } from "@/store/annotationStore";
-import { useWorkflowStore } from "@/store/workflowStore";
 import {
   AnnotationShape,
-  RectangleShape,
-  CircleShape,
   ArrowShape,
+  CircleShape,
   FreehandShape,
+  RectangleShape,
   TextShape,
   ToolType,
-} from "@/types";
+  useAnnotationStore,
+  useWorkflowStore,
+} from "../leesfield/upstream-node-host";
 import Konva from "konva";
 
 const COLORS = [
@@ -29,6 +31,7 @@ const COLORS = [
 const STROKE_WIDTHS = [2, 4, 8];
 
 export function AnnotationModal() {
+  const tc = useCanvasTranslation();
   const {
     isModalOpen,
     sourceNodeId,
@@ -55,6 +58,7 @@ export function AnnotationModal() {
   const transformerRef = useRef<Konva.Transformer>(null);
   const textInputRef = useRef<HTMLInputElement>(null);
   const [image, setImage] = useState<HTMLImageElement | null>(null);
+  const [imageError, setImageError] = useState<string | null>(null);
   const [stageSize, setStageSize] = useState({ width: 800, height: 600 });
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -68,9 +72,14 @@ export function AnnotationModal() {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    let active = true;
+    setImage(null);
+    setImageError(null);
     if (sourceImage) {
       const img = new window.Image();
+      if (/^https?:\/\//.test(sourceImage)) img.crossOrigin = "anonymous";
       img.onload = () => {
+        if (!active) return;
         setImage(img);
         if (containerRef.current) {
           const containerWidth = containerRef.current.clientWidth - 100;
@@ -86,8 +95,15 @@ export function AnnotationModal() {
           });
         }
       };
+      img.onerror = () => {
+        if (!active) return;
+        setImageError("The source image could not be loaded.");
+      };
       img.src = sourceImage;
     }
+    return () => {
+      active = false;
+    };
   }, [sourceImage]);
 
   useEffect(() => {
@@ -332,7 +348,17 @@ export function AnnotationModal() {
 
   const handleDone = useCallback(() => {
     if (!sourceNodeId) return;
-    const flattenedImage = flattenImage();
+    let flattenedImage = "";
+    try {
+      flattenedImage = flattenImage();
+    } catch {
+      setImageError("The annotated image could not be rendered.");
+      return;
+    }
+    if (!flattenedImage.startsWith("data:image/")) {
+      setImageError("Wait for the source image to finish loading.");
+      return;
+    }
     updateNodeData(sourceNodeId, { annotations, outputImage: flattenedImage, outputImageRef: undefined });
     closeModal();
   }, [sourceNodeId, annotations, flattenImage, updateNodeData, closeModal]);
@@ -419,10 +445,15 @@ export function AnnotationModal() {
   ];
 
   return (
-    <div className="fixed inset-0 z-[100] bg-neutral-950 flex flex-col">
+    <div
+      className="fixed inset-0 z-[100] bg-neutral-950 flex flex-col"
+      role="dialog"
+      aria-modal="true"
+      aria-label={tc("Annotation editor")}
+    >
       {/* Top Bar */}
-      <div className="h-14 bg-neutral-900 flex items-center justify-between px-4 border-b border-neutral-800">
-        <div className="flex items-center gap-1.5">
+      <div className="h-14 min-w-0 bg-neutral-900 flex items-center justify-between gap-3 px-4 border-b border-neutral-800">
+        <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto">
           {tools.map((tool) => (
             <button
               key={tool.type}
@@ -439,26 +470,31 @@ export function AnnotationModal() {
 
           <div className="w-px h-6 bg-neutral-700 mx-3" />
 
-          <button onClick={undo} className="px-3 py-1.5 text-xs text-neutral-400 hover:text-white">Undo</button>
-          <button onClick={redo} className="px-3 py-1.5 text-xs text-neutral-400 hover:text-white">Redo</button>
+          <button onClick={undo} className="px-3 py-1.5 text-xs text-neutral-400 hover:text-white">{tc("Undo")}</button>
+          <button onClick={redo} className="px-3 py-1.5 text-xs text-neutral-400 hover:text-white">{tc("Redo")}</button>
 
           <div className="w-px h-6 bg-neutral-700 mx-3" />
 
-          <button onClick={clearAnnotations} className="px-3 py-1.5 text-xs text-neutral-400 hover:text-red-400">Clear</button>
+          <button onClick={clearAnnotations} className="px-3 py-1.5 text-xs text-neutral-400 hover:text-red-400">{tc("Clear")}</button>
         </div>
 
-        <div className="flex items-center gap-3">
-          <button onClick={closeModal} className="px-4 py-1.5 text-xs font-medium text-neutral-400 hover:text-white">
-            Cancel
-          </button>
-          <button onClick={handleDone} className="px-4 py-1.5 text-xs font-medium bg-white text-neutral-900 rounded hover:bg-neutral-200">
-            Done
-          </button>
+        <div className="flex shrink-0 items-center gap-3">
+          <button onClick={closeModal} className="px-4 py-1.5 text-xs font-medium text-neutral-400 hover:text-white">{tc("Cancel")}</button>
+          {imageError ? <span role="alert" className="text-xs text-red-400">{imageError}</span> : null}
+          <button
+            onClick={handleDone}
+            disabled={!image}
+            aria-describedby={!image ? "annotation-image-status" : undefined}
+            className="px-4 py-1.5 text-xs font-medium bg-white text-neutral-900 rounded hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-40"
+          >{tc("Done")}</button>
         </div>
       </div>
 
       {/* Canvas Container */}
       <div ref={containerRef} className="flex-1 overflow-hidden bg-neutral-900">
+        {!image && !imageError ? (
+          <p id="annotation-image-status" role="status" className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-xs text-neutral-400">{tc("Loading source image…")}</p>
+        ) : null}
         <Stage
           ref={stageRef}
           width={containerRef.current?.clientWidth || 800}
@@ -488,7 +524,7 @@ export function AnnotationModal() {
       <div className="h-14 bg-neutral-900 flex items-center justify-center gap-6 px-4 border-t border-neutral-800">
         {/* Colors */}
         <div className="flex items-center gap-2">
-          <span className="text-[10px] text-neutral-500 uppercase tracking-wide mr-1">Color</span>
+          <span className="text-[10px] text-neutral-500 uppercase tracking-wide mr-1">{tc("Color")}</span>
           {COLORS.map((color) => (
             <button
               key={color}
@@ -505,7 +541,7 @@ export function AnnotationModal() {
 
         {/* Stroke Width */}
         <div className="flex items-center gap-2">
-          <span className="text-[10px] text-neutral-500 uppercase tracking-wide mr-1">Size</span>
+          <span className="text-[10px] text-neutral-500 uppercase tracking-wide mr-1">{tc("Size")}</span>
           {STROKE_WIDTHS.map((width) => (
             <button
               key={width}
@@ -527,9 +563,7 @@ export function AnnotationModal() {
           className={`px-3 py-1.5 text-[10px] uppercase tracking-wide rounded transition-colors ${
             toolOptions.fillColor ? "bg-neutral-700 text-white" : "text-neutral-500 hover:text-white"
           }`}
-        >
-          Fill
-        </button>
+        >{tc("Fill")}</button>
 
         {/* Zoom */}
         <div className="flex items-center gap-2 ml-auto">

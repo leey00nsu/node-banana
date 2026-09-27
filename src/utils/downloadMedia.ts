@@ -69,7 +69,7 @@ export async function downloadMedia(
   const finalExt = ext === "bin" ? fallbackExt[mediaType] : ext;
   const finalName = filename
     ? `${filename}.${finalExt}`
-    : `${mediaType}-${Date.now()}.${finalExt}`;
+    : `leesfield-${Date.now()}.${finalExt}`;
 
   if (isHttp) {
     try {

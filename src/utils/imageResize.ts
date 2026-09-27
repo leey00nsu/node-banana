@@ -2,7 +2,9 @@
  * Image resize utilities. Pure browser-side via canvas.
  */
 
-import type { ImageResizeFit, ImageResizeFormat, ImageResizeMode } from "@/types";
+type ImageResizeMode = "exact" | "maxEdge" | "scale";
+type ImageResizeFit = "contain" | "cover" | "stretch";
+type ImageResizeFormat = "keep" | "png" | "jpeg" | "webp";
 
 export interface ResizeOptions {
   mode: ImageResizeMode;

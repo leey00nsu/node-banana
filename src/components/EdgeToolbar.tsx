@@ -1,17 +1,41 @@
 "use client";
 
-import { useWorkflowStore } from "@/store/workflowStore";
-import { WorkflowEdgeData } from "@/types";
+import { useCanvasTranslation } from "../leesfield/localization";
+
+import { useWorkflowStore } from "../leesfield/upstream-node-host";
+import type { WorkflowEdgeData } from "../leesfield/upstream-node-host";
 import { useMemo, useEffect, useState, useRef } from "react";
 
-export function EdgeToolbar() {
+export type EdgeToolbarHostedEdge = {
+  id: string;
+  source?: string;
+  target?: string;
+  sourceHandle?: string | null;
+  targetHandle?: string | null;
+  data?: WorkflowEdgeData & Record<string, unknown>;
+};
+
+export type EdgeToolbarHostedProps = {
+  edge: EdgeToolbarHostedEdge | null;
+  position: { x: number; y: number } | null;
+  writable?: boolean;
+  ariaLabel?: string;
+  onTogglePause: (edgeId: string) => void;
+  onDelete: (edgeId: string) => void;
+  onLoopCountChange?: (edgeId: string, delta: number) => void;
+};
+
+export type EdgeToolbarProps = { hosted?: EdgeToolbarHostedProps };
+
+export function EdgeToolbar({ hosted }: EdgeToolbarProps = {}) {
+  const tc = useCanvasTranslation();
   const { edges, toggleEdgePause, removeEdge, setLoopCount } = useWorkflowStore();
   const [clickPosition, setClickPosition] = useState<{ x: number; y: number } | null>(null);
   const previousSelectedEdgeId = useRef<string | null>(null);
 
   const selectedEdge = useMemo(
-    () => edges.find((edge) => edge.selected),
-    [edges]
+    () => hosted?.edge ?? edges.find((edge) => edge.selected) ?? null,
+    [edges, hosted?.edge]
   );
 
   // Helper function to compute the image connection sequence number
@@ -51,6 +75,11 @@ export function EdgeToolbar() {
 
   // Track mouse position when edge selection changes
   useEffect(() => {
+    if (hosted) {
+      setClickPosition(hosted.position);
+      previousSelectedEdgeId.current = hosted.edge?.id ?? null;
+      return;
+    }
     const handleMouseDown = (e: MouseEvent) => {
       // Check if clicking on an edge
       const target = e.target as Element;
@@ -61,33 +90,37 @@ export function EdgeToolbar() {
 
     document.addEventListener('mousedown', handleMouseDown);
     return () => document.removeEventListener('mousedown', handleMouseDown);
-  }, []);
+  }, [hosted]);
 
   // Reset click position when edge is deselected
   useEffect(() => {
+    if (hosted) return;
     if (!selectedEdge && previousSelectedEdgeId.current) {
       setClickPosition(null);
     }
     previousSelectedEdgeId.current = selectedEdge?.id || null;
-  }, [selectedEdge]);
+  }, [hosted, selectedEdge]);
 
-  const toolbarPosition = clickPosition;
+  const toolbarPosition = hosted ? hosted.position : clickPosition;
 
   const handleTogglePause = () => {
     if (selectedEdge) {
-      toggleEdgePause(selectedEdge.id);
+      if (hosted) hosted.onTogglePause(selectedEdge.id);
+      else toggleEdgePause(selectedEdge.id);
     }
   };
 
   const handleLoopCountChange = (delta: number) => {
     if (selectedEdge) {
-      setLoopCount(selectedEdge.id, loopCount + delta);
+      if (hosted) hosted.onLoopCountChange?.(selectedEdge.id, delta);
+      else setLoopCount(selectedEdge.id, loopCount + delta);
     }
   };
 
   const handleDelete = () => {
     if (selectedEdge) {
-      removeEdge(selectedEdge.id);
+      if (hosted) hosted.onDelete(selectedEdge.id);
+      else removeEdge(selectedEdge.id);
     }
   };
 
@@ -99,7 +132,10 @@ export function EdgeToolbar() {
 
   return (
     <div
-      className="fixed z-[100] flex items-center gap-1 bg-neutral-800 border border-neutral-600 rounded-lg shadow-xl p-1"
+      className="fixed z-[100] flex items-center gap-1 bg-neutral-800 border border-neutral-600 rounded-lg shadow-xl p-1 node-banana-runtime__edge-toolbar"
+      role="toolbar"
+      aria-label={hosted?.ariaLabel ?? "Selected edge"}
+      data-node-banana-component="EdgeToolbar"
       style={{
         left: toolbarPosition.x,
         top: toolbarPosition.y,
@@ -107,18 +143,18 @@ export function EdgeToolbar() {
       }}
     >
       {sequenceNumber !== null && (
-        <span className="text-[10px] font-medium text-neutral-300 px-2 border-r border-neutral-600">
-          Image {sequenceNumber}
+        <span className="text-[10px] font-medium text-neutral-300 px-2 border-r border-neutral-600">{tc("Image")}{sequenceNumber}
         </span>
       )}
       {isLoop && (
         <>
-          <span className="text-[10px] font-medium text-fuchsia-300 px-1.5">Loop</span>
+          <span className="text-[10px] font-medium text-fuchsia-300 px-1.5">{tc("Loop")}</span>
           <button
+            type="button"
             onClick={() => handleLoopCountChange(-1)}
             disabled={loopCount <= 1}
             className="p-1 rounded hover:bg-neutral-700 text-fuchsia-300 hover:text-fuchsia-100 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-            title="Decrease loop count"
+            title={tc("Decrease loop count")}
           >
             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" d="M5 12h14" />
@@ -126,10 +162,11 @@ export function EdgeToolbar() {
           </button>
           <span className="text-[11px] font-mono text-fuchsia-100 min-w-[20px] text-center">{loopCount}</span>
           <button
+            type="button"
             onClick={() => handleLoopCountChange(1)}
             disabled={loopCount >= 100}
             className="p-1 rounded hover:bg-neutral-700 text-fuchsia-300 hover:text-fuchsia-100 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-            title="Increase loop count"
+            title={tc("Increase loop count")}
           >
             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" d="M12 5v14M5 12h14" />
@@ -141,12 +178,15 @@ export function EdgeToolbar() {
       {!isLoop && (
         <button
           onClick={handleTogglePause}
+          type="button"
+          disabled={hosted?.writable === false}
+          aria-label={hasPause ? tc("Remove pause") : tc("Add pause")}
         className={`p-1.5 rounded hover:bg-neutral-700 transition-colors ${
           hasPause
             ? "text-amber-400 hover:text-amber-300"
             : "text-neutral-400 hover:text-neutral-100"
         }`}
-        title={hasPause ? "Remove pause" : "Add pause"}
+        title={hasPause ? tc("Remove pause") : tc("Add pause")}
       >
         {hasPause ? (
           // Play icon (resume)
@@ -163,8 +203,11 @@ export function EdgeToolbar() {
       )}
       <button
         onClick={handleDelete}
+        type="button"
+        disabled={hosted?.writable === false}
+        aria-label={tc("Delete edge")}
         className="p-1.5 rounded hover:bg-neutral-700 text-neutral-400 hover:text-red-400 transition-colors"
-        title="Delete"
+        title={tc("Delete")}
       >
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
           <path

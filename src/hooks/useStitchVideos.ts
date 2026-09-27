@@ -16,7 +16,7 @@ import {
   canEncodeVideo,
 } from 'mediabunny';
 import type { Rotation } from 'mediabunny';
-import { createAvcEncodingConfig, AVC_LEVEL_4_0, AVC_LEVEL_5_1 } from '@/lib/video-encoding';
+import { createAvcEncodingConfig, AVC_LEVEL_4_0, AVC_LEVEL_5_1 } from '../lib/video-encoding';
 import {
   DEFAULT_BITRATE,
   MAX_OUTPUT_FPS,
@@ -25,7 +25,7 @@ import {
   BASELINE_PIXEL_LIMIT,
   ensureEvenDimension,
   probeVideoMetadata,
-} from '@/lib/video-probing';
+} from '../lib/video-probing';
 
 const determineEncodeParameters = async (
   blobs: Blob[]
@@ -140,7 +140,8 @@ export async function stitchVideosAsync(
   videoBlobs: Blob[],
   audioData?: AudioData | null,
   onProgress?: (progress: StitchProgress) => void,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  preserveEmbeddedAudio: boolean = true
 ): Promise<Blob> {
   try {
     // Initialize progress
@@ -201,6 +202,7 @@ export async function stitchVideosAsync(
       height: safeHeight,
       bitrate: resolvedBitrate,
       fullCodecString: codecProfile,
+      hardwareAcceleration: 'prefer-software',
     });
 
     if (!supportsConfig) {
@@ -220,7 +222,7 @@ export async function stitchVideosAsync(
 
     // Extract embedded audio from source videos when no external audio override is provided
     let effectiveAudioData = audioData ?? null;
-    if (!effectiveAudioData) {
+    if (!effectiveAudioData && preserveEmbeddedAudio) {
       updateProgress('processing', 'Extracting audio from source videos...', 8);
       // Per-clip audio: each entry is either extracted buffers or a pending
       // duration (seconds) for clips before the reference format is known.
@@ -319,7 +321,7 @@ export async function stitchVideosAsync(
     updateProgress('processing', 'Creating output container...', 10);
 
     let videoSource: VideoSampleSource | null = new VideoSampleSource(
-      createAvcEncodingConfig(resolvedBitrate, safeWidth, safeHeight, codecProfile)
+      createAvcEncodingConfig(resolvedBitrate, safeWidth, safeHeight, codecProfile, undefined, false)
     );
 
     const bufferTarget = new BufferTarget();

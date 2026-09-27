@@ -1,7 +1,10 @@
 "use client";
 
+import { useCanvasTranslation } from "../../leesfield/localization";
+import { Handle } from "../../leesfield/port-handle";
+
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Handle, NodeProps, Node, Position, useUpdateNodeInternals } from "@xyflow/react";
+import { NodeProps, Node, Position, useUpdateNodeInternals } from "@xyflow/react";
 
 import { BaseNode } from "./BaseNode";
 import { ComfyAppParameters } from "./ComfyAppParameters";
@@ -375,6 +378,7 @@ function EmptyState({
   onImport: () => void;
   onDropWorkflow: (upload: ComfyUpload) => void;
 }) {
+  const tc = useCanvasTranslation();
   const [dragOver, setDragOver] = useState(false);
 
   const jsonFrom = (transfer: DataTransfer): File | undefined =>
@@ -428,9 +432,7 @@ function EmptyState({
         // 12px text reserves room for descenders the label never uses, and
         // padding then measures from that empty space rather than the letters.
         className="nodrag nopan inline-flex items-center pl-[11px] pr-3 py-1.5 text-xs leading-none rounded-lg bg-neutral-700 hover:bg-neutral-600 text-neutral-100 transition-colors"
-      >
-        Load workflow
-      </button>
+      >{tc("Load workflow")}</button>
     </div>
   );
 }
@@ -558,6 +560,7 @@ function Preview({
   livePreview: string | null;
   error: string | null;
 }) {
+  const tc = useCanvasTranslation();
   if (isRunning) return <Rendering livePreview={livePreview} />;
   if (error) {
     return (
@@ -567,7 +570,7 @@ function Preview({
     );
   }
   if (!preview) {
-    return <span className="text-[10px] text-neutral-600">No output yet</span>;
+    return <span className="text-[10px] text-neutral-600">{tc("No output yet")}</span>;
   }
   if (preview.type === "text") {
     return (

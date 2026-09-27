@@ -1,5 +1,7 @@
 "use client";
 
+import { useCanvasTranslation } from "../../leesfield/localization";
+
 /**
  * Downstream-router rail — a fixed overlay pinned to the right edge of the cell
  * node set editor (it does not pan or zoom with the canvas). Users drag any
@@ -219,6 +221,7 @@ export function RouterRail({
   size: RailSize;
   onDisconnectType: (type: string) => void;
 }) {
+  const tc = useCanvasTranslation();
   const viewport = useViewport();
   const { types, railH, blockTop, contentLeft } = useMemo(
     () => railMetrics(wires, size),
@@ -329,9 +332,7 @@ export function RouterRail({
         <span
           className="absolute text-[11px] font-semibold text-neutral-300 whitespace-nowrap select-none"
           style={{ top: railH + CAPTION_GAP, left: SOCKET_LEFT, transform: "translateX(-50%)" }}
-        >
-          Router
-        </span>
+        >{tc("Router")}</span>
       </div>
     </>
   );

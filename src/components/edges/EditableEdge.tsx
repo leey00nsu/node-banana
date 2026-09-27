@@ -1,5 +1,7 @@
 "use client";
 
+import { useCanvasTranslation } from "../../leesfield/localization";
+
 import { useState, useCallback, useMemo } from "react";
 import {
   BaseEdge,
@@ -8,13 +10,37 @@ import {
   getBezierPath,
   useReactFlow,
 } from "@xyflow/react";
-import { useWorkflowStore } from "@/store/workflowStore";
-import { NanoBananaNodeData, WorkflowEdgeData } from "@/types";
+import { useWorkflowStore } from "../../leesfield/upstream-node-host";
+import type { NanoBananaNodeData, WorkflowEdgeData } from "../../leesfield/upstream-node-host";
 import { getSharedGradientId } from "./SharedEdgeGradients";
 
 interface EdgeData extends WorkflowEdgeData {
   offsetX?: number;
   offsetY?: number;
+  edgeStyle?: "angular" | "curved";
+  isConnectedToSelection?: boolean;
+  isTargetLoading?: boolean;
+  onEdgeDataChange?: (edgeId: string, patch: Record<string, unknown>) => void;
+}
+
+export type EditableEdgeHostedProps = {
+  edgeStyle?: "angular" | "curved";
+  isConnectedToSelection?: boolean;
+  isTargetLoading?: boolean;
+  onEdgeDataChange?: (edgeId: string, patch: Record<string, unknown>) => void;
+};
+
+export type EditableEdgeProps = EdgeProps & { hosted?: EditableEdgeHostedProps };
+
+function useOptionalReactFlow() {
+  try {
+    return useReactFlow();
+  } catch {
+    // The hosted presenter can be rendered in isolation (for example while a
+    // canvas shell is being measured). Dragging simply has no-op semantics
+    // until React Flow supplies its store.
+    return null;
+  }
 }
 
 // Colors for different connection types (dimmed for softer appearance)
@@ -48,13 +74,16 @@ export function EditableEdge({
   targetHandleId,
   source,
   target,
-}: EdgeProps) {
-  const { setEdges } = useReactFlow();
-  const edgeStyle = useWorkflowStore((state) => state.edgeStyle);
+  hosted,
+}: EditableEdgeProps) {
+  const tc = useCanvasTranslation();
+  const reactFlow = useOptionalReactFlow();
+  const setEdges = reactFlow?.setEdges ?? (() => undefined);
+  const storeEdgeStyle = useWorkflowStore((state) => state.edgeStyle);
   const [isDragging, setIsDragging] = useState(false);
 
   // Narrow selector: returns boolean, only re-renders when selection relevance changes
-  const isConnectedToSelection = useWorkflowStore((state) =>
+  const storeIsConnectedToSelection = useWorkflowStore((state) =>
     state.nodes.some((n) => n.selected && (n.id === source || n.id === target))
   );
 
@@ -64,11 +93,14 @@ export function EditableEdge({
   const hasPause = edgeData?.hasPause ?? false;
 
   // Narrow selector: only re-renders when target loading status changes
-  const isTargetLoading = useWorkflowStore((state) => {
+  const storeIsTargetLoading = useWorkflowStore((state) => {
     const targetNode = state.nodes.find((n) => n.id === target);
     if (targetNode?.type !== "nanoBanana") return false;
     return (targetNode.data as NanoBananaNodeData).status === "loading";
   });
+  const edgeStyle = hosted?.edgeStyle ?? edgeData?.edgeStyle ?? storeEdgeStyle;
+  const isConnectedToSelection = hosted?.isConnectedToSelection ?? edgeData?.isConnectedToSelection ?? storeIsConnectedToSelection;
+  const isTargetLoading = hosted?.isTargetLoading ?? edgeData?.isTargetLoading ?? storeIsTargetLoading;
 
   // Determine edge color based on handle type (magenta for loop edges, orange if paused)
   const edgeColor = useMemo(() => {
@@ -187,21 +219,17 @@ export function EditableEdge({
         const deltaX = moveEvent.clientX - startX;
         const deltaY = moveEvent.clientY - startY;
 
-        setEdges((edges) =>
-          edges.map((edge) => {
-            if (edge.id === id) {
-              return {
-                ...edge,
-                data: {
-                  ...edge.data,
-                  offsetX: direction === "horizontal" ? startOffsetX + deltaX : startOffsetX,
-                  offsetY: direction === "vertical" ? startOffsetY + deltaY : startOffsetY,
-                },
-              };
-            }
-            return edge;
-          })
-        );
+        const patch = {
+          offsetX: direction === "horizontal" ? startOffsetX + deltaX : startOffsetX,
+          offsetY: direction === "vertical" ? startOffsetY + deltaY : startOffsetY,
+        };
+        if (hosted?.onEdgeDataChange ?? edgeData?.onEdgeDataChange) {
+          (hosted?.onEdgeDataChange ?? edgeData?.onEdgeDataChange)?.(id, patch);
+        } else {
+          setEdges((edges) =>
+            edges.map((edge) => edge.id === id ? { ...edge, data: { ...edge.data, ...patch } } : edge)
+          );
+        }
       };
 
       const handleMouseUp = () => {
@@ -213,7 +241,7 @@ export function EditableEdge({
       document.addEventListener("mousemove", handleMouseMove);
       document.addEventListener("mouseup", handleMouseUp);
     },
-    [id, offsetX, offsetY, setEdges]
+    [edgeData?.onEdgeDataChange, hosted?.onEdgeDataChange, id, offsetX, offsetY, setEdges]
   );
 
   return (
@@ -281,7 +309,12 @@ export function EditableEdge({
 
       {/* Pause indicator near target connection point */}
       {hasPause && (
-        <g transform={`translate(${targetX - 24}, ${targetY})`}>
+        <g
+          transform={`translate(${targetX - 24}, ${targetY})`}
+          role="img"
+          aria-label={tc("Paused edge")}
+          data-node-banana-component="PauseIndicator"
+        >
           {/* Background circle */}
           <circle
             r={10}

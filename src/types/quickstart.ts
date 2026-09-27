@@ -1,4 +1,4 @@
-import type { NodeType } from "./nodes";
+type NodeType = string;
 
 export type QuickstartView = "initial" | "templates" | "vibe" | "browse";
 

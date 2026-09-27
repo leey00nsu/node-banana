@@ -1,4 +1,8 @@
 "use client";
+import { CanvasSelect, CanvasInput, CanvasTextarea } from "../../leesfield/inputs";
+
+
+import { useCanvasTranslation } from "../../leesfield/localization";
 
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 
@@ -111,6 +115,7 @@ interface ComfyParameterInputProps {
  * the end on each keystroke.
  */
 function ComfyParameterInputInner({ param, value, onChange }: ComfyParameterInputProps) {
+  const tc = useCanvasTranslation();
   const label = shortLabel(param);
   // Pairs each label with its control, so a screen reader announces the field
   // by name and a click on the label focuses it. Generated rather than derived
@@ -169,21 +174,21 @@ function ComfyParameterInputInner({ param, value, onChange }: ComfyParameterInpu
         >
           {label}
         </label>
-        <select
+        <CanvasSelect
           id={controlId}
           value={(value as string) ?? ""}
           onChange={(e) => onChange(param.id, e.target.value || undefined)}
           className="nodrag nopan flex-1 min-w-0 text-[11px] py-1 px-2 rounded-md bg-[#1a1a1a] focus:outline-none focus:ring-1 focus:ring-neutral-600 text-white"
         >
           <option value="">
-            {param.default !== undefined ? `Default (${String(param.default)})` : "Default"}
+            {param.default !== undefined ? `Default (${String(param.default)})` : tc("Default")}
           </option>
           {param.enum.map((option) => (
             <option key={option} value={option}>
               {option}
             </option>
           ))}
-        </select>
+        </CanvasSelect>
       </div>
     );
   }
@@ -195,7 +200,7 @@ function ComfyParameterInputInner({ param, value, onChange }: ComfyParameterInpu
         className="flex items-center gap-1.5 text-[11px] text-neutral-300 cursor-pointer"
         title={param.description}
       >
-        <input
+        <CanvasInput
           type="checkbox"
           checked={checked}
           onChange={(e) => onChange(param.id, e.target.checked)}
@@ -212,7 +217,7 @@ function ComfyParameterInputInner({ param, value, onChange }: ComfyParameterInpu
         <label htmlFor={controlId} className="text-[11px] text-neutral-400" title={param.description}>
           {label}
         </label>
-        <textarea
+        <CanvasTextarea
           id={controlId}
           value={local}
           rows={3}
@@ -266,7 +271,7 @@ function ComfyParameterInputInner({ param, value, onChange }: ComfyParameterInpu
           {param.isSeed && (
             <button
               type="button"
-              title="Randomise this seed now"
+              title={tc("Randomise this seed now")}
               onClick={() => {
                 const next = Math.floor(Math.random() * 1_000_000_000);
                 setLocal(String(next));

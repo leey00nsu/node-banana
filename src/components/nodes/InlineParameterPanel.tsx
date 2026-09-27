@@ -1,5 +1,7 @@
 "use client";
 
+import { useCanvasTranslation } from "../../leesfield/localization";
+
 import React, { ReactNode, useRef, useState, useEffect } from "react";
 
 interface InlineParameterPanelProps {
@@ -19,6 +21,7 @@ function InlineParameterPanelInner({
   children,
   nodeId,
 }: InlineParameterPanelProps) {
+  const tc = useCanvasTranslation();
   const contentRef = useRef<HTMLDivElement>(null);
   const [contentHeight, setContentHeight] = useState(0);
 
@@ -35,11 +38,11 @@ function InlineParameterPanelInner({
         type="button"
         onClick={onToggle}
         className={`nodrag nopan w-full flex items-center justify-center gap-1 py-1 text-neutral-500 hover:text-neutral-300 transition-colors ${expanded ? "bg-[#2a2a2a]" : ""}`}
-        aria-label={expanded ? "Collapse parameters" : "Expand parameters"}
+        aria-label={expanded ? tc("Collapse parameters") : tc("Expand parameters")}
         aria-expanded={expanded}
         aria-controls={`params-${nodeId}`}
       >
-        <span className="text-[10px]">Settings</span>
+        <span className="text-[10px]">{tc("Settings")}</span>
         <svg
           className="w-3 h-3 transition-transform duration-200"
           style={{ transform: expanded ? "rotate(180deg)" : "rotate(0deg)" }}

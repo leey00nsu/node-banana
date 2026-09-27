@@ -1,7 +1,12 @@
 "use client";
+import { CanvasSelect, CanvasInput } from "../../leesfield/inputs";
+
+
+import { useCanvasTranslation } from "../../leesfield/localization";
+import { Handle } from "../../leesfield/port-handle";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Handle, Node, NodeProps, Position, useReactFlow } from "@xyflow/react";
+import { Node, NodeProps, Position, useReactFlow } from "@xyflow/react";
 import { BaseNode } from "./BaseNode";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { ArrayNodeData } from "@/types";
@@ -19,6 +24,7 @@ function arraysEqual(a: string[], b: string[]): boolean {
 }
 
 export function ArrayNode({ id, data, selected }: NodeProps<ArrayNodeType>) {
+  const tc = useCanvasTranslation();
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
   const addNode = useWorkflowStore((state) => state.addNode);
   const onConnect = useWorkflowStore((state) => state.onConnect);
@@ -228,16 +234,16 @@ export function ArrayNode({ id, data, selected }: NodeProps<ArrayNodeType>) {
 
       <div className="flex flex-col gap-2 pt-3 flex-1 min-h-0">
         <div className="flex items-center gap-2">
-          <label className="shrink-0 text-[11px] text-neutral-400">Split</label>
-          <select
+          <label className="shrink-0 text-[11px] text-neutral-400">{tc("Split")}</label>
+          <CanvasSelect
             value={nodeData.splitMode}
             onChange={handleBasicModeChange}
             className="nodrag nopan flex-1 min-w-0 text-[11px] py-1 px-2 bg-[#1a1a1a] rounded-md focus:outline-none focus:ring-1 focus:ring-neutral-600 text-white"
           >
-            <option value="delimiter">Delimiter</option>
-            <option value="newline">Newline</option>
-            <option value="regex">Regex (Advanced)</option>
-          </select>
+            <option value="delimiter">{tc("Delimiter")}</option>
+            <option value="newline">{tc("Newline")}</option>
+            <option value="regex">{tc("Regex (Advanced)")}</option>
+          </CanvasSelect>
           {/* Batch mode toggle */}
           <button
             type="button"
@@ -247,10 +253,8 @@ export function ArrayNode({ id, data, selected }: NodeProps<ArrayNodeType>) {
                 ? "bg-blue-600/80 text-blue-100"
                 : "bg-[#1a1a1a] text-neutral-500 hover:text-neutral-300"
             }`}
-            title={nodeData.batchMode ? "Batch mode: all items sent to one downstream node" : "Enable batch mode"}
-          >
-            Batch
-          </button>
+            title={nodeData.batchMode ? tc("Batch mode: all items sent to one downstream node") : tc("Enable batch mode")}
+          >{tc("Batch")}</button>
           {/* Auto-route button (hidden in batch mode) */}
           {!nodeData.batchMode && (
             <button
@@ -258,7 +262,7 @@ export function ArrayNode({ id, data, selected }: NodeProps<ArrayNodeType>) {
               onClick={handleAutoRouteToPrompts}
               disabled={previewItems.length === 0}
               className="nodrag nopan shrink-0 py-1 px-1.5 bg-[#1a1a1a] rounded-md text-neutral-400 hover:text-neutral-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Auto-route to Prompts"
+              title={tc("Auto-route to Prompts")}
             >
               <svg className="w-3.5 h-3.5 rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                 <path d="M16 3h5v5" />
@@ -272,7 +276,7 @@ export function ArrayNode({ id, data, selected }: NodeProps<ArrayNodeType>) {
 
         {nodeData.splitMode === "delimiter" && (
           <div className="flex items-center gap-2 max-w-[75%]">
-            <label className="shrink-0 text-[11px] text-neutral-400">By</label>
+            <label className="shrink-0 text-[11px] text-neutral-400">{tc("By")}</label>
             <input
               value={nodeData.delimiter}
               onChange={(e) => updateSettingsAndReparse({ delimiter: e.target.value })}
@@ -284,7 +288,7 @@ export function ArrayNode({ id, data, selected }: NodeProps<ArrayNodeType>) {
 
         {nodeData.splitMode === "regex" && (
           <div className="flex items-center gap-2 max-w-[75%]">
-            <label className="shrink-0 text-[11px] text-neutral-400">By</label>
+            <label className="shrink-0 text-[11px] text-neutral-400">{tc("By")}</label>
             <input
               value={nodeData.regexPattern}
               onChange={(e) => updateSettingsAndReparse({ regexPattern: e.target.value })}
@@ -303,41 +307,36 @@ export function ArrayNode({ id, data, selected }: NodeProps<ArrayNodeType>) {
             <svg className={`w-3 h-3 transition-transform ${showAdvanced ? "rotate-90" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
             </svg>
-            <span>Advanced</span>
+            <span>{tc("Advanced")}</span>
           </button>
 
           {showAdvanced && (
             <div className="px-2 pt-1.5 pb-0.5 flex items-center gap-3">
               <label className="flex items-center gap-1.5 text-[11px] text-neutral-300">
-                <input
+                <CanvasInput
                   type="checkbox"
                   checked={nodeData.trimItems}
                   onChange={(e) => updateSettingsAndReparse({ trimItems: e.target.checked })}
                   className="nodrag nopan w-3 h-3 rounded bg-[#1a1a1a] text-neutral-600 focus:ring-1 focus:ring-neutral-600 focus:ring-offset-0"
-                />
-                Trim
-              </label>
+                />{tc("Trim")}</label>
               <label className="flex items-center gap-1.5 text-[11px] text-neutral-300">
-                <input
+                <CanvasInput
                   type="checkbox"
                   checked={nodeData.removeEmpty}
                   onChange={(e) => updateSettingsAndReparse({ removeEmpty: e.target.checked })}
                   className="nodrag nopan w-3 h-3 rounded bg-[#1a1a1a] text-neutral-600 focus:ring-1 focus:ring-neutral-600 focus:ring-offset-0"
-                />
-                Remove empty
-              </label>
+                />{tc("Remove empty")}</label>
             </div>
           )}
         </div>
 
-        <div className="mt-1 text-[10px] uppercase tracking-wide text-neutral-500">
-          Parsed Items ({previewItems.length})
+        <div className="mt-1 text-[10px] uppercase tracking-wide text-neutral-500">{tc("Parsed Items (")}{previewItems.length})
         </div>
         <div className="relative min-h-[50px] border border-neutral-700/40 rounded-md bg-[#1a1a1a]">
           {nodeData.error ? (
             <div className="p-2 text-[11px] text-red-400">{nodeData.error}</div>
           ) : previewItems.length === 0 ? (
-            <div className="p-2 text-[11px] text-neutral-500">No items parsed</div>
+            <div className="p-2 text-[11px] text-neutral-500">{tc("No items parsed")}</div>
           ) : (
             <div className="py-1">
               {previewItems.map((item, index) => {
@@ -356,7 +355,7 @@ export function ArrayNode({ id, data, selected }: NodeProps<ArrayNodeType>) {
                         ? "bg-blue-900/40 text-blue-200 ring-1 ring-blue-500/60"
                         : "bg-neutral-800/60 text-neutral-300 hover:bg-neutral-700/60"
                     }`}
-                    title={isSelected ? "Selected for next connection (click to unselect)" : "Click to select for next connection"}
+                    title={isSelected ? tc("Selected for next connection (click to unselect)") : tc("Click to select for next connection")}
                   >
                     {index + 1}. {item}
                   </button>
@@ -367,10 +366,10 @@ export function ArrayNode({ id, data, selected }: NodeProps<ArrayNodeType>) {
         </div>
         <div className="text-[10px] text-neutral-500">
           {nodeData.batchMode
-            ? "Batch: all items sent to downstream node"
+            ? tc("Batch: all items sent to downstream node")
             : nodeData.selectedOutputIndex !== null
               ? `Next wire uses item ${nodeData.selectedOutputIndex + 1}`
-              : "No selection: wires advance in order from item 1"}
+              : tc("No selection: wires advance in order from item 1")}
         </div>
       </div>
     </BaseNode>

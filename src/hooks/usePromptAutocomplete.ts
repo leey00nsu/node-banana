@@ -1,5 +1,5 @@
-import { useState, useCallback, useMemo, RefObject } from "react";
-import { AvailableVariable } from "@/types";
+import { useState, useCallback, useMemo, useRef, useEffect, RefObject } from "react";
+import { AvailableVariable } from "../leesfield/upstream-node-host";
 
 interface UsePromptAutocompleteOptions {
   availableVariables: AvailableVariable[];
@@ -32,6 +32,8 @@ export function usePromptAutocomplete({
   const [autocompleteFilter, setAutocompleteFilter] = useState("");
   const [selectedAutocompleteIndex, setSelectedAutocompleteIndex] = useState(0);
 
+  const cursorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (cursorTimer.current) clearTimeout(cursorTimer.current); }, []);
   const filteredAutocompleteVars = useMemo(() => {
     return availableVariables.filter((v) =>
       v.name.toLowerCase().includes(autocompleteFilter.toLowerCase())
@@ -57,7 +59,8 @@ export function usePromptAutocomplete({
       setShowAutocomplete(false);
 
       const newCursorPos = atPosition + varName.length + 1;
-      setTimeout(() => {
+      if (cursorTimer.current) clearTimeout(cursorTimer.current);
+      cursorTimer.current = setTimeout(() => {
         if (textareaRef.current) {
           textareaRef.current.focus();
           textareaRef.current.setSelectionRange(newCursorPos, newCursorPos);

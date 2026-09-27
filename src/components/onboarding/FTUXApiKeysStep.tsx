@@ -1,5 +1,7 @@
 "use client";
 
+import { useCanvasTranslation } from "../../leesfield/localization";
+
 import { useState, useEffect } from "react";
 import type { ReactElement } from "react";
 import { FTUXStepProps } from "@/types/ftux";
@@ -74,6 +76,7 @@ const providers: ProviderInfo[] = [
 ];
 
 export function FTUXApiKeysStep({}: FTUXStepProps) {
+  const tc = useCanvasTranslation();
   const updateProviderApiKey = useWorkflowStore((state) => state.updateProviderApiKey);
   const providerSettings = useWorkflowStore((state) => state.providerSettings);
   const [envStatus, setEnvStatus] = useState<EnvStatusResponse | null>(null);
@@ -173,7 +176,7 @@ export function FTUXApiKeysStep({}: FTUXStepProps) {
                     </div>
                   </div>
                   {provider.isRecommended && (
-                    <span className="text-xs text-green-400 shrink-0">Recommended</span>
+                    <span className="text-xs text-green-400 shrink-0">{tc("Recommended")}</span>
                   )}
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
@@ -216,7 +219,7 @@ export function FTUXApiKeysStep({}: FTUXStepProps) {
                       }
                       className="text-xs text-neutral-400 hover:text-neutral-200"
                     >
-                      {showKey[provider.id] ? "Hide" : "Show"}
+                      {showKey[provider.id] ? "Hide" : tc("Show")}
                     </button>
                   )}
                 </div>

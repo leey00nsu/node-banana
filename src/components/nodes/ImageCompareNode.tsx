@@ -1,14 +1,15 @@
 "use client";
 
-import { useMemo } from "react";
-import { Handle, Position, NodeProps, Node } from "@xyflow/react";
+import { useCanvasTranslation } from "../../leesfield/localization";
+import { Handle } from "../../leesfield/port-handle";
+
+import { Position, NodeProps, Node } from "@xyflow/react";
 import {
   ReactCompareSlider,
   ReactCompareSliderImage,
 } from "react-compare-slider";
 import { BaseNode } from "./BaseNode";
-import { useWorkflowStore } from "@/store/workflowStore";
-import { ImageCompareNodeData } from "@/types";
+import { ImageCompareNodeData } from "../../leesfield/upstream-node-host";
 
 type ImageCompareNodeType = Node<ImageCompareNodeData, "imageCompare">;
 
@@ -17,51 +18,12 @@ export function ImageCompareNode({
   data,
   selected,
 }: NodeProps<ImageCompareNodeType>) {
+  const tc = useCanvasTranslation();
   const nodeData = data;
-  const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
-  const edges = useWorkflowStore((state) => state.edges);
-  const nodes = useWorkflowStore((state) => state.nodes);
-
-  // Collect images in real-time from connected nodes (same pattern as OutputGalleryNode)
-  const displayImages = useMemo(() => {
-    const connectedImages: string[] = [];
-
-    // Get edges connected to this node, sorted by creation time for stable ordering
-    const sortedEdges = edges
-      .filter((edge) => edge.target === id)
-      .sort((a, b) => {
-        const aTime = (a.data?.createdAt as number) || 0;
-        const bTime = (b.data?.createdAt as number) || 0;
-        return aTime - bTime;
-      });
-
-    sortedEdges.forEach((edge) => {
-      const sourceNode = nodes.find((n) => n.id === edge.source);
-      if (!sourceNode) return;
-
-      let image: string | null = null;
-
-      // Extract image from different node types
-      if (sourceNode.type === "imageInput") {
-        image = (sourceNode.data as any).image;
-      } else if (sourceNode.type === "annotation") {
-        image = (sourceNode.data as any).outputImage;
-      } else if (sourceNode.type === "nanoBanana") {
-        image = (sourceNode.data as any).outputImage;
-      } else if (sourceNode.type === "removeBackground") {
-        image = (sourceNode.data as any).outputImage;
-      }
-
-      if (image) {
-        connectedImages.push(image);
-      }
-    });
-
-    return connectedImages;
-  }, [edges, nodes, id]);
-
-  const imageA = displayImages[0] || nodeData.imageA || null;
-  const imageB = displayImages[1] || nodeData.imageB || null;
+  // Leesfield's host adapter resolves canonical before/after ports. Trust that
+  // port-aware projection instead of guessing from a short list of node types.
+  const imageA = nodeData.imageA || null;
+  const imageB = nodeData.imageB || null;
 
   return (
     <BaseNode
@@ -105,14 +67,14 @@ export function ImageCompareNode({
             itemOne={
               <ReactCompareSliderImage
                 src={imageA}
-                alt="Image A"
+                alt={tc("Image A")}
                 style={{ objectFit: "contain" }}
               />
             }
             itemTwo={
               <ReactCompareSliderImage
                 src={imageB}
-                alt="Image B"
+                alt={tc("Image B")}
                 style={{ objectFit: "contain" }}
               />
             }
@@ -131,14 +93,14 @@ export function ImageCompareNode({
         <div className="w-full flex-1 min-h-[200px] border border-dashed border-neutral-600 rounded flex flex-col items-center justify-center gap-2">
           <span className="text-neutral-500 text-[10px] text-center px-4">
             {!imageA && !imageB
-              ? "Connect 2 images to compare"
-              : "Connect another image to compare"}
+              ? tc("Connect 2 images to compare")
+              : tc("Connect another image to compare")}
           </span>
           {imageA && !imageB && (
-            <div className="text-[9px] text-neutral-600">Image A connected</div>
+            <div className="text-[9px] text-neutral-600">{tc("Image A connected")}</div>
           )}
           {!imageA && imageB && (
-            <div className="text-[9px] text-neutral-600">Image B connected</div>
+            <div className="text-[9px] text-neutral-600">{tc("Image B connected")}</div>
           )}
         </div>
       )}

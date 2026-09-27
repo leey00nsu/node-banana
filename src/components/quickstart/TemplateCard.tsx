@@ -1,6 +1,8 @@
 "use client";
 
-import { TemplateCategory } from "@/types/quickstart";
+import { useCanvasTranslation } from "../../leesfield/localization";
+
+import { TemplateCategory } from "../../types/quickstart";
 
 interface TemplateCardProps {
   template: {
@@ -40,6 +42,7 @@ export function TemplateCard({
   onUseWorkflow,
   disabled = false,
 }: TemplateCardProps) {
+  const tc = useCanvasTranslation();
   return (
     <div
       className={`
@@ -55,7 +58,7 @@ export function TemplateCard({
       {/* Thumbnail - Left side (square) */}
       <div
         className={`
-          w-36 h-36 flex-shrink-0 rounded-lg overflow-hidden relative
+          w-36 h-36 max-sm:w-16 max-sm:h-16 flex-shrink-0 rounded-lg overflow-hidden relative
           ${
             isLoading
               ? "bg-blue-500/20"
@@ -69,7 +72,7 @@ export function TemplateCard({
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={previewImage}
-              alt={`${template.name} preview`}
+              alt={`${tc(template.name)} preview`}
               className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${hoverImage ? "group-hover:opacity-0" : ""}`}
               style={{ imageRendering: "auto" }}
             />
@@ -78,7 +81,7 @@ export function TemplateCard({
               /* eslint-disable-next-line @next/next/no-img-element */
               <img
                 src={hoverImage}
-                alt={`${template.name} hover preview`}
+                alt={`${tc(template.name)} hover preview`}
                 className="absolute inset-0 w-full h-full object-cover opacity-0 group-hover:opacity-100 transition-opacity duration-300"
                 style={{ imageRendering: "auto" }}
               />
@@ -104,7 +107,7 @@ export function TemplateCard({
         {/* Header row */}
         <div className="flex items-start justify-between gap-2 mb-1">
           <h3 className="text-sm font-medium text-neutral-200 truncate">
-            {template.name}
+            {tc(template.name)}
           </h3>
           <span
             className={`
@@ -112,13 +115,13 @@ export function TemplateCard({
               ${CATEGORY_COLORS[template.category]}
             `}
           >
-            {CATEGORY_LABELS[template.category]}
+            {tc(CATEGORY_LABELS[template.category])}
           </span>
         </div>
 
         {/* Description */}
         <p className="text-xs text-neutral-400 line-clamp-2 flex-1">
-          {template.description}
+          {tc(template.description)}
         </p>
 
         {/* Provider tags and node count */}
@@ -132,8 +135,7 @@ export function TemplateCard({
             </span>
           ))}
           <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-neutral-700/50 text-neutral-400">
-            {nodeCount} nodes
-          </span>
+            {nodeCount}{tc("nodes")}</span>
         </div>
 
         {/* Action row */}
@@ -163,13 +165,9 @@ export function TemplateCard({
                     fill="currentColor"
                     d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                   />
-                </svg>
-                Loading...
-              </>
+                </svg>{tc("Loading...")}</>
             ) : (
-              <>
-                Use workflow
-                <svg
+              <>{tc("Use workflow")}<svg
                   className="w-3 h-3"
                   fill="none"
                   viewBox="0 0 24 24"

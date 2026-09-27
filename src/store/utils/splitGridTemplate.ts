@@ -19,14 +19,14 @@ import type {
   SplitGridTemplate,
   SplitGridTemplateRouterConnection,
   SplitGridCell,
-} from "@/types";
-import { MODEL_DISPLAY_NAMES } from "@/types";
+} from "../../leesfield/upstream-node-host";
+import { MODEL_DISPLAY_NAMES } from "../../leesfield/upstream-node-host";
 import {
   createDefaultNodeData,
   createDefaultSplitGridTemplate,
   defaultNodeDimensions,
   SPLIT_GRID_BASE_NODE_ID,
-} from "./nodeDefaults";
+} from "../../leesfield/upstream-node-host";
 
 export { createDefaultSplitGridTemplate, SPLIT_GRID_BASE_NODE_ID };
 
@@ -250,7 +250,7 @@ export function getSplitGridTemplate(data: SplitGridNodeData): SplitGridTemplate
   // never be populated (and re-materialize on every run) — treat as invalid.
   if (
     data.template &&
-    data.template.nodes.some((node) => node.id === data.template!.baseNodeId)
+    data.template.nodes.some((node: WorkflowNode) => node.id === data.template!.baseNodeId)
   ) {
     return data.template;
   }
@@ -355,7 +355,7 @@ export function needsMaterialization(
   if (cells.length !== rows * cols) return true;
   // A partially deleted grid is intentional pruning; rebuild only when every
   // cell's base image node is gone
-  return cells.every((cell) => !existingNodeIds.has(cell.baseImageNodeId));
+  return cells.every((cell: SplitGridCell) => !existingNodeIds.has(cell.baseImageNodeId));
 }
 
 export interface BuildCellInstancesOptions {

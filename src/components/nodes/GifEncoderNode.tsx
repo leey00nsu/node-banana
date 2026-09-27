@@ -1,20 +1,26 @@
 "use client";
+import { CanvasInput } from "../../leesfield/inputs";
+
+
+import { useCanvasTranslation } from "../../leesfield/localization";
+import { Handle } from "../../leesfield/port-handle";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Handle, Position, NodeProps, Node } from "@xyflow/react";
+import { Position, NodeProps, Node } from "@xyflow/react";
 import { BaseNode } from "./BaseNode";
-import { useWorkflowStore } from "@/store/workflowStore";
-import type { GifEncoderNodeData, WorkflowNode } from "@/types";
-import { useShowHandleLabels } from "@/hooks/useShowHandleLabels";
 import { HandleLabel } from "./HandleLabel";
-import { generateThumbnail } from "@/utils/imageThumbnail";
 import {
-  getThumbnail,
-  setThumbnail,
+  GifEncoderNodeData,
+  WorkflowNode,
+  generateThumbnail,
   getPending,
-  setPending,
+  getThumbnail,
   removePending,
-} from "@/store/thumbnailCache";
+  setPending,
+  setThumbnail,
+  useShowHandleLabels,
+  useWorkflowStore,
+} from "../../leesfield/upstream-node-host";
 
 type GifEncoderNodeType = Node<GifEncoderNodeData, "gifEncoder">;
 
@@ -76,7 +82,7 @@ function useThumbnailSrc(fullSrc: string | null): string | null {
 function FrameThumbnail({ src, alt }: { src: string; alt: string }) {
   const thumbSrc = useThumbnailSrc(src);
   return (
-    <img src={thumbSrc ?? src} alt={alt} className="w-full h-full object-contain rounded" />
+    <img src={thumbSrc ?? src} alt={alt} draggable={false} className="w-full h-full object-contain rounded" />
   );
 }
 
@@ -100,6 +106,7 @@ function formatBytes(bytes: number | null): string {
 }
 
 export function GifEncoderNode({ id, data, selected }: NodeProps<GifEncoderNodeType>) {
+  const tc = useCanvasTranslation();
   const nodeData = data;
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
   const regenerateNode = useWorkflowStore((state) => state.regenerateNode);
@@ -135,29 +142,30 @@ export function GifEncoderNode({ id, data, selected }: NodeProps<GifEncoderNodeT
     }
   }, [imageEdges, nodeData.clipOrder, id, updateNodeData]);
 
-  // Build ordered frame list for the filmstrip
+  // Keep every collection member attached to its input edge; clipOrder moves
+  // whole groups while preserving the source's cell order.
   const orderedFrames = useMemo(() => {
-    const map = new Map<string, { edgeId: string; src: string | null }>();
+    type Frame = { edgeId: string; sourceEdgeId: string; src: string | null };
+    const map = new Map<string, Frame[]>();
+    const groups = Array.isArray(nodeData.frameGroups)
+      ? nodeData.frameGroups as { sourceEdgeId: string; frames: string[] }[]
+      : [];
     imageEdges.forEach((edge) => {
-      const sourceNode = nodes.find((n) => n.id === edge.source);
-      if (!sourceNode) return;
-      map.set(edge.id, { edgeId: edge.id, src: getImageFromSourceNode(sourceNode) });
-    });
-    const order = nodeData.clipOrder?.length ? nodeData.clipOrder : imageEdges.map((e) => e.id);
-    const ordered: { edgeId: string; src: string | null }[] = [];
-    for (const eid of order) {
-      const f = map.get(eid);
-      if (f) ordered.push(f);
-    }
-    // Append any new edges not yet in clipOrder
-    imageEdges.forEach((edge) => {
-      if (!order.includes(edge.id)) {
-        const f = map.get(edge.id);
-        if (f) ordered.push(f);
+      const group = groups.find((candidate) => candidate.sourceEdgeId === edge.id);
+      if (group) {
+        map.set(edge.id, group.frames.map((src, index) => ({
+          edgeId: `${edge.id}:asset:${index}`, sourceEdgeId: edge.id, src,
+        })));
+        return;
       }
+      const sourceNode = nodes.find((n) => n.id === edge.source);
+      if (sourceNode) map.set(edge.id, [{
+        edgeId: edge.id, sourceEdgeId: edge.id, src: getImageFromSourceNode(sourceNode),
+      }]);
     });
-    return ordered;
-  }, [imageEdges, nodes, nodeData.clipOrder]);
+    const order = [...new Set([...(nodeData.clipOrder ?? []), ...imageEdges.map((edge) => edge.id)])];
+    return order.flatMap((edgeId) => map.get(edgeId) ?? []);
+  }, [imageEdges, nodes, nodeData.clipOrder, nodeData.frameGroups]);
 
   // Pointer-based drag reorder (HTML5 drag doesn't work inside React Flow)
   const [draggedId, setDraggedId] = useState<string | null>(null);
@@ -177,8 +185,8 @@ export function GifEncoderNode({ id, data, selected }: NodeProps<GifEncoderNodeT
     for (const el of elementsUnder) {
       const clipEl = (el as HTMLElement).closest("[data-frame-id]") as HTMLElement | null;
       if (clipEl) {
-        const targetId = clipEl.dataset.frameId!;
-        if (targetId !== draggedId) setHoverId(targetId);
+        const targetId = clipEl.dataset.sourceEdgeId!;
+        setHoverId(targetId !== draggedId ? targetId : null);
         return;
       }
     }
@@ -192,7 +200,7 @@ export function GifEncoderNode({ id, data, selected }: NodeProps<GifEncoderNodeT
       setHoverId(null);
       return;
     }
-    const order = [...(nodeData.clipOrder || [])];
+    const order = [...new Set(orderedFrames.map((frame) => frame.sourceEdgeId))];
     const a = order.indexOf(draggedId);
     const b = order.indexOf(hoverId);
     if (a !== -1 && b !== -1) {
@@ -202,7 +210,7 @@ export function GifEncoderNode({ id, data, selected }: NodeProps<GifEncoderNodeT
     }
     setDraggedId(null);
     setHoverId(null);
-  }, [draggedId, hoverId, nodeData.clipOrder, id, updateNodeData]);
+  }, [draggedId, hoverId, orderedFrames, id, updateNodeData]);
 
   // Dynamic image handles: render up to the highest referenced handle index
   // (parsed from "image-N" targetHandles) plus one free slot for a new
@@ -260,13 +268,13 @@ export function GifEncoderNode({ id, data, selected }: NodeProps<GifEncoderNodeT
         isConnectable={true}
         style={{ top: "50%" }}
       />
-      <HandleLabel label="GIF Out" side="source" color="var(--handle-color-image)" top="calc(50% - 7px)" visible={showLabels} />
+      <HandleLabel label={tc("GIF Out")} side="source" color="var(--handle-color-image)" top="calc(50% - 7px)" visible={showLabels} />
 
       <div className="flex-1 flex flex-col min-h-0 gap-2">
         {/* Filmstrip */}
         {orderedFrames.length === 0 ? (
           <div className="h-16 flex items-center justify-center border border-dashed border-neutral-600 rounded">
-            <span className="text-[10px] text-neutral-500">Connect image frames</span>
+            <span className="text-[10px] text-neutral-500">{tc("Connect image frames")}</span>
           </div>
         ) : (
           <div className="overflow-y-auto nowheel grid grid-cols-6 content-start gap-1.5 p-1.5 bg-neutral-900/50 rounded shrink-0 max-h-[120px]">
@@ -274,13 +282,14 @@ export function GifEncoderNode({ id, data, selected }: NodeProps<GifEncoderNodeT
               <div
                 key={frame.edgeId}
                 data-frame-id={frame.edgeId}
-                onPointerDown={(e) => handlePointerDown(e, frame.edgeId)}
+                data-source-edge-id={frame.sourceEdgeId}
+                onPointerDown={(e) => handlePointerDown(e, frame.sourceEdgeId)}
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}
                 className={`nodrag relative aspect-square bg-neutral-800 border rounded cursor-move transition-colors group ${
-                  draggedId === frame.edgeId
+                  draggedId === frame.sourceEdgeId
                     ? "opacity-50 border-blue-500"
-                    : hoverId === frame.edgeId && draggedId
+                    : hoverId === frame.sourceEdgeId && draggedId
                       ? "border-blue-400 ring-1 ring-blue-400/50"
                       : "border-neutral-600 hover:border-neutral-500"
                 }`}
@@ -292,9 +301,9 @@ export function GifEncoderNode({ id, data, selected }: NodeProps<GifEncoderNodeT
                 )}
                 <div className="absolute bottom-0 left-0 bg-black/70 px-0.5 text-[8px] text-white rounded-tr">{i + 1}</div>
                 <button
-                  onClick={() => removeEdge(frame.edgeId)}
+                  onClick={() => removeEdge(frame.sourceEdgeId)}
                   className="absolute top-0 right-0 w-3.5 h-3.5 bg-red-600/80 hover:bg-red-500 rounded text-white opacity-0 group-hover:opacity-100 flex items-center justify-center"
-                  title="Disconnect"
+                  title={tc("Disconnect")}
                 >
                   <svg className="w-2 h-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -309,11 +318,11 @@ export function GifEncoderNode({ id, data, selected }: NodeProps<GifEncoderNodeT
         <div className="relative flex-1 min-h-0 bg-neutral-900/40 rounded">
           {nodeData.outputGif ? (
             <>
-              <img src={nodeData.outputGif} alt="GIF preview" className="absolute inset-0 w-full h-full object-contain rounded" />
+              <img src={nodeData.outputGif} alt={tc("GIF preview")} className="absolute inset-0 w-full h-full object-contain rounded" />
               <button
                 onClick={() => updateNodeData(id, { outputGif: null, status: "idle", outputBytes: null, outputDimensions: null })}
                 className="absolute top-1 right-1 w-5 h-5 bg-neutral-900/80 hover:bg-red-600/80 rounded flex items-center justify-center text-neutral-400 hover:text-white"
-                title="Clear GIF"
+                title={tc("Clear GIF")}
               >
                 <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -322,7 +331,7 @@ export function GifEncoderNode({ id, data, selected }: NodeProps<GifEncoderNodeT
             </>
           ) : (
             <div className="absolute inset-0 flex items-center justify-center">
-              <span className="text-[10px] text-neutral-500">{nodeData.status === "loading" ? `Encoding... ${Math.round(nodeData.progress)}%` : "No GIF yet"}</span>
+              <span className="text-[10px] text-neutral-500">{nodeData.status === "loading" ? `Encoding... ${Math.round(nodeData.progress)}%` : tc("No GIF yet")}</span>
             </div>
           )}
         </div>
@@ -339,7 +348,7 @@ export function GifEncoderNode({ id, data, selected }: NodeProps<GifEncoderNodeT
               onChange={(e) => updateNodeData(id, { fps: Math.max(1, Math.min(30, Number(e.target.value) || 1)) })}
               className="w-12 px-1.5 py-0.5 bg-neutral-800 rounded text-neutral-200"
             />
-            <label className="text-neutral-400">Colors</label>
+            <label className="text-neutral-400">{tc("Colors")}</label>
             <input
               type="number"
               min={2}
@@ -349,18 +358,16 @@ export function GifEncoderNode({ id, data, selected }: NodeProps<GifEncoderNodeT
               className="w-14 px-1.5 py-0.5 bg-neutral-800 rounded text-neutral-200"
             />
             <label className="flex items-center gap-1 text-neutral-400 cursor-pointer">
-              <input
+              <CanvasInput
                 type="checkbox"
                 checked={nodeData.dither}
                 onChange={(e) => updateNodeData(id, { dither: e.target.checked })}
-              />
-              Dither
-            </label>
+              />{tc("Dither")}</label>
           </div>
 
           <div className="flex items-center gap-2">
             <label className="flex items-center gap-1 text-neutral-400 cursor-pointer">
-              <input
+              <CanvasInput
                 type="checkbox"
                 checked={nodeData.targetMaxBytes !== null}
                 onChange={(e) =>
@@ -368,9 +375,7 @@ export function GifEncoderNode({ id, data, selected }: NodeProps<GifEncoderNodeT
                     targetMaxBytes: e.target.checked ? 128 * 1024 : null,
                   })
                 }
-              />
-              Target ≤
-            </label>
+              />{tc("Target ≤")}</label>
             <input
               type="number"
               min={1}
@@ -398,7 +403,7 @@ export function GifEncoderNode({ id, data, selected }: NodeProps<GifEncoderNodeT
             disabled={orderedFrames.filter((f) => f.src).length < 2 || nodeData.status === "loading" || isRunning}
             className="px-3 py-1 bg-blue-600 hover:bg-blue-500 disabled:bg-neutral-700 disabled:text-neutral-500 disabled:cursor-not-allowed rounded text-white text-xs font-medium transition-colors"
           >
-            {nodeData.status === "loading" ? "Encoding..." : "Encode GIF"}
+            {nodeData.status === "loading" ? tc("Encoding...") : tc("Encode GIF")}
           </button>
         </div>
 

@@ -1,18 +1,24 @@
 "use client";
+import { CanvasTextarea } from "../../leesfield/inputs";
+
+
+import { useCanvasTranslation } from "../../leesfield/localization";
+import { Handle } from "../../leesfield/port-handle";
 
 import { useCallback, useState, useEffect, useMemo, useRef, ReactNode } from "react";
-import { Handle, Position, NodeProps, Node } from "@xyflow/react";
+import { Position, NodeProps, Node } from "@xyflow/react";
 import { BaseNode } from "./BaseNode";
-import { usePromptAutocomplete } from "@/hooks/usePromptAutocomplete";
-import { useWorkflowStore } from "@/store/workflowStore";
-import { PromptConstructorNodeData, PromptNodeData, LLMGenerateNodeData, AvailableVariable } from "@/types";
-import { resolveTextSourcesThroughRouters } from "@/store/utils/connectedInputs";
-import { parseVarTags } from "@/utils/parseVarTags";
+import { usePromptAutocomplete } from "../../hooks/usePromptAutocomplete";
+import { useWorkflowStore } from "../../leesfield/upstream-node-host";
+import { PromptConstructorNodeData, PromptNodeData, AvailableVariable } from "../../leesfield/upstream-node-host";
+import { parseVarTags } from "../../utils/parseVarTags";
 
 type PromptConstructorNodeType = Node<PromptConstructorNodeData, "promptConstructor">;
 
 export function PromptConstructorNode({ id, data, selected }: NodeProps<PromptConstructorNodeType>) {
+  const tc = useCanvasTranslation();
   const nodeData = data;
+  const writable = useWorkflowStore((state) => state.writable);
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
   const edges = useWorkflowStore((state) => state.edges);
   const nodes = useWorkflowStore((state) => state.nodes);
@@ -21,6 +27,8 @@ export function PromptConstructorNode({ id, data, selected }: NodeProps<PromptCo
   const [localTemplate, setLocalTemplate] = useState(nodeData.template);
   const [isEditing, setIsEditing] = useState(false);
 
+  const blurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (blurTimer.current) clearTimeout(blurTimer.current); }, []);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Sync from props when not actively editing
@@ -33,10 +41,10 @@ export function PromptConstructorNode({ id, data, selected }: NodeProps<PromptCo
   // Get available variables from connected prompt nodes (named variables + inline <var> tags)
   const availableVariables = useMemo((): AvailableVariable[] => {
     const directTextNodes = edges
-      .filter((e) => e.target === id && e.targetHandle === "text")
+      .filter((e) => e.target === id && e.targetHandle === "text" && !e.data?.hasPause)
       .map((e) => nodes.find((n) => n.id === e.source))
       .filter((n): n is typeof nodes[0] => n !== undefined);
-    const connectedTextNodes = resolveTextSourcesThroughRouters(directTextNodes, nodes, edges);
+    const connectedTextNodes = directTextNodes;
 
     const vars: AvailableVariable[] = [];
     const usedNames = new Set<string>();
@@ -48,7 +56,7 @@ export function PromptConstructorNode({ id, data, selected }: NodeProps<PromptCo
         if (promptData.variableName) {
           vars.push({
             name: promptData.variableName,
-            value: promptData.prompt || "",
+            value: promptData.resolvedPrompt ?? promptData.prompt ?? "",
             nodeId: node.id,
           });
           usedNames.add(promptData.variableName);
@@ -60,9 +68,8 @@ export function PromptConstructorNode({ id, data, selected }: NodeProps<PromptCo
     connectedTextNodes.forEach((node) => {
       let text: string | null = null;
       if (node.type === "prompt") {
-        text = (node.data as PromptNodeData).prompt || null;
-      } else if (node.type === "llmGenerate") {
-        text = (node.data as LLMGenerateNodeData).outputText || null;
+        text = (node.data as PromptNodeData).resolvedPrompt ?? (node.data as PromptNodeData).prompt ?? null;
+
       } else if (node.type === "promptConstructor") {
         const pcData = node.data as PromptConstructorNodeData;
         text = pcData.outputText ?? pcData.template ?? null;
@@ -101,7 +108,7 @@ export function PromptConstructorNode({ id, data, selected }: NodeProps<PromptCo
     textareaRef,
     localTemplate,
     setLocalTemplate,
-    onTemplateCommit: (newTemplate) => updateNodeData(id, { template: newTemplate }),
+    onTemplateCommit: (newTemplate) => { if (writable) updateNodeData(id, { template: newTemplate }); },
   });
 
   // Compute unresolved variables client-side
@@ -177,12 +184,13 @@ export function PromptConstructorNode({ id, data, selected }: NodeProps<PromptCo
 
   const handleBlur = useCallback(() => {
     setIsEditing(false);
-    if (localTemplate !== nodeData.template) {
+    if (writable && localTemplate !== nodeData.template) {
       updateNodeData(id, { template: localTemplate });
     }
     // Close autocomplete on blur
-    setTimeout(() => closeAutocomplete(), 200);
-  }, [id, localTemplate, nodeData.template, updateNodeData, closeAutocomplete]);
+    if (blurTimer.current) clearTimeout(blurTimer.current);
+    blurTimer.current = setTimeout(() => closeAutocomplete(), 200);
+  }, [id, localTemplate, nodeData.template, updateNodeData, closeAutocomplete, writable]);
 
   return (
     <>
@@ -212,15 +220,16 @@ export function PromptConstructorNode({ id, data, selected }: NodeProps<PromptCo
               {highlightedContent}
             </div>
           )}
-          <textarea
+          <CanvasTextarea
             ref={textareaRef}
+            readOnly={!writable}
             value={localTemplate}
             onChange={handleChange}
             onFocus={handleFocus}
             onBlur={handleBlur}
             onKeyDown={handleKeyDown}
             onScroll={handleScroll}
-            placeholder="Type @ to insert variables..."
+            placeholder={tc("Type @ to insert variables...")}
             className={`nodrag nopan nowheel relative w-full h-full p-3 text-xs leading-relaxed text-neutral-100 rounded-lg resize-none focus:outline-none placeholder:text-neutral-500 ${highlightedContent.length > 0 ? "bg-transparent" : "bg-neutral-800"} ${availableVariables.length > 0 || unresolvedVars.length > 0 ? "pb-7" : ""}`}
             title={resolvedPreview ? `Preview: ${resolvedPreview}` : undefined}
           />
@@ -265,8 +274,7 @@ export function PromptConstructorNode({ id, data, selected }: NodeProps<PromptCo
             </span>
             {unresolvedVars.length > 0 && (
               <span className="text-red-400 whitespace-nowrap">
-                {unresolvedVars.length} {unresolvedVars.length === 1 ? 'var' : 'vars'} missing
-              </span>
+                {unresolvedVars.length} {unresolvedVars.length === 1 ? tc("var") : tc("vars")}{tc("missing")}</span>
             )}
           </div>
         )}

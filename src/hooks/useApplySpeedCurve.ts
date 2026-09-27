@@ -13,8 +13,8 @@ import {
   canEncodeVideo,
 } from 'mediabunny';
 import type { Rotation, VideoSample } from 'mediabunny';
-import { getEasingFunction, type EasingFunction } from '@/lib/easing-functions';
-import { createAvcEncodingConfig, AVC_LEVEL_4_0, AVC_LEVEL_5_1 } from '@/lib/video-encoding';
+import { getEasingFunction, type EasingFunction } from '../lib/easing-functions';
+import { createAvcEncodingConfig, AVC_LEVEL_4_0, AVC_LEVEL_5_1 } from '../lib/video-encoding';
 
 // Inlined constants (same pattern as Phase 41)
 const DEFAULT_BITRATE = 8_000_000;
@@ -229,6 +229,7 @@ async function applySpeedCurveCore(
         height: targetHeight,
         bitrate: tier.bitrate,
         fullCodecString: tier.codec,
+        hardwareAcceleration: 'prefer-software',
       });
 
       if (supported) {
@@ -260,7 +261,8 @@ async function applySpeedCurveCore(
         selectedConfig.width,
         selectedConfig.height,
         selectedConfig.codec,
-        selectedConfig.framerate
+        selectedConfig.framerate,
+        false
       )
     );
 

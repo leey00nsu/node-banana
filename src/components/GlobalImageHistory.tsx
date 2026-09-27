@@ -1,5 +1,7 @@
 "use client";
 
+import { useCanvasTranslation } from "../leesfield/localization";
+
 import { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useWorkflowStore } from "@/store/workflowStore";
@@ -101,6 +103,7 @@ function HistorySidebar({
   onDragStart: (e: React.DragEvent, item: ImageHistoryItem) => void;
   triggerRect: DOMRect | null;
 }) {
+  const tc = useCanvasTranslation();
   const sidebarRef = useRef<HTMLDivElement>(null);
 
   // Close on click outside
@@ -152,21 +155,18 @@ function HistorySidebar({
     >
       {/* Header */}
       <div className="px-4 py-3 border-b border-neutral-700 flex items-center justify-between shrink-0">
-        <span className="text-sm text-neutral-200 font-medium">
-          All History ({history.length})
+        <span className="text-sm text-neutral-200 font-medium">{tc("All History (")}{history.length})
         </span>
         <div className="flex items-center gap-2">
           <button
             onClick={onClear}
             className="text-[10px] text-neutral-500 hover:text-red-400 transition-colors"
-            title="Clear all history"
-          >
-            Clear All
-          </button>
+            title={tc("Clear all history")}
+          >{tc("Clear All")}</button>
           <button
             onClick={onClose}
             className="w-5 h-5 rounded hover:bg-neutral-700 flex items-center justify-center text-neutral-400 hover:text-white transition-colors"
-            title="Close"
+            title={tc("Close")}
           >
             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -209,7 +209,7 @@ function HistorySidebar({
 
       {/* Footer */}
       <div className="px-4 py-2 border-t border-neutral-700 bg-neutral-900/50 shrink-0">
-        <span className="text-[10px] text-neutral-500">Drag images to canvas to create nodes</span>
+        <span className="text-[10px] text-neutral-500">{tc("Drag images to canvas to create nodes")}</span>
       </div>
     </div>,
     document.body
@@ -217,6 +217,7 @@ function HistorySidebar({
 }
 
 export function GlobalImageHistory() {
+  const tc = useCanvasTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
   const drawerRef = useRef<HTMLDivElement>(null);
@@ -368,8 +369,7 @@ export function GlobalImageHistory() {
                   } as React.CSSProperties
                 }
               >
-                +{history.length - 10} more
-              </button>
+                +{history.length - 10}{tc("more")}</button>
             );
           })()}
 

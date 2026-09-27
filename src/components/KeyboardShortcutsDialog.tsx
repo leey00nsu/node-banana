@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect } from "react";
+import { useCanvasTranslation } from "../leesfield/localization";
+
+import { useEffect, useRef } from "react";
 
 interface ShortcutItem {
   keys: string[];
@@ -71,32 +73,52 @@ function Kbd({ children }: { children: string }) {
 interface KeyboardShortcutsDialogProps {
   isOpen: boolean;
   onClose: () => void;
+  hosted?: boolean;
 }
 
-export function KeyboardShortcutsDialog({ isOpen, onClose }: KeyboardShortcutsDialogProps) {
+export function KeyboardShortcutsDialog({ isOpen, onClose, hosted = false }: KeyboardShortcutsDialogProps) {
+  const tc = useCanvasTranslation();
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef(onClose);
+  useEffect(() => { closeRef.current = onClose; }, [onClose]);
   useEffect(() => {
     if (!isOpen) return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        onClose();
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const dialog = dialogRef.current;
+    const buttons = () => Array.from(dialog?.querySelectorAll<HTMLElement>('button:not([disabled]), [href], input, select, textarea, [tabindex="0"]') ?? []);
+    buttons()[0]?.focus();
+    const focusInside = (event: FocusEvent) => {
+      if (event.target instanceof Node && dialog && !dialog.contains(event.target)) buttons()[0]?.focus();
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault(); event.stopPropagation(); closeRef.current();
+      } else if (event.key === "Tab") {
+        const items = buttons();
+        const first = items[0], last = items.at(-1);
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
       }
     };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, onClose]);
+    document.addEventListener("focusin", focusInside);
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => {
+      document.removeEventListener("focusin", focusInside);
+      window.removeEventListener("keydown", handleKeyDown, true);
+      if (previous?.isConnected) previous.focus();
+    };
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50">
+    <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={tc("Keyboard Shortcuts")} className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <div className="bg-neutral-800 rounded-lg w-[520px] max-h-[80vh] border border-neutral-700 shadow-xl flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-neutral-700">
-          <h2 className="text-base font-semibold text-neutral-100">
-            Keyboard Shortcuts
-          </h2>
+          <h2 className="text-base font-semibold text-neutral-100">{tc("Keyboard Shortcuts")}</h2>
           <button
+            aria-label={tc("Close keyboard shortcuts")}
             onClick={onClose}
             className="p-1 text-neutral-400 hover:text-neutral-200 hover:bg-neutral-700 rounded transition-colors"
           >
@@ -109,18 +131,18 @@ export function KeyboardShortcutsDialog({ isOpen, onClose }: KeyboardShortcutsDi
         {/* Content */}
         <div className="overflow-y-auto px-5 py-4 space-y-5">
           {shortcutGroups.map((group) => (
-            <div key={group.title}>
+            <div key={tc(group.title)}>
               <h3 className="text-[11px] font-semibold text-neutral-400 uppercase tracking-wider mb-2">
-                {group.title}
+                {tc(group.title)}
               </h3>
               <div className="space-y-1.5">
-                {group.shortcuts.map((shortcut, idx) => (
+                {group.shortcuts.filter((shortcut) => !hosted || !["Run workflow", "Add LLM Text node", "Add Array node", "Add ComfyUI App node"].includes(shortcut.description)).map((shortcut, idx) => (
                   <div
                     key={idx}
                     className="flex items-center justify-between py-1.5 px-2 rounded hover:bg-neutral-700/40 transition-colors"
                   >
                     <span className="text-sm text-neutral-300">
-                      {shortcut.description}
+                      {tc(shortcut.description)}
                     </span>
                     <div className="flex items-center gap-1 ml-4 shrink-0">
                       {shortcut.keys.map((key, keyIdx) => (
@@ -144,9 +166,7 @@ export function KeyboardShortcutsDialog({ isOpen, onClose }: KeyboardShortcutsDi
           <button
             onClick={onClose}
             className="px-3 py-1.5 text-xs font-medium text-neutral-300 hover:text-neutral-100 bg-neutral-700 hover:bg-neutral-600 rounded transition-colors"
-          >
-            Close
-          </button>
+          >{tc("Close")}</button>
         </div>
       </div>
     </div>

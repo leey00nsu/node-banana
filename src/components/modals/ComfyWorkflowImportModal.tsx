@@ -1,5 +1,7 @@
 "use client";
 
+import { useCanvasTranslation } from "../../leesfield/localization";
+
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -152,6 +154,7 @@ export function ComfyWorkflowImportModal({
   reconfigure,
   upload,
 }: ComfyWorkflowImportModalProps) {
+  const tc = useCanvasTranslation();
   const [tab, setTab] = useState<"file" | "blueprints" | "saved">("file");
   const [inspection, setInspection] = useState<Inspection | null>(null);
   const [source, setSource] = useState<"upload" | "blueprint">("upload");
@@ -764,9 +767,7 @@ export function ComfyWorkflowImportModal({
               {/* Absent until there is something in it — an empty tab for a
                   feature you have not used yet is a dead end with a label. */}
               {savedNodes.length > 0 && (
-                <TabButton active={tab === "saved"} onClick={() => setTab("saved")}>
-                  Saved nodes
-                </TabButton>
+                <TabButton active={tab === "saved"} onClick={() => setTab("saved")}>{tc("Saved nodes")}</TabButton>
               )}
             </div>
           )}
@@ -901,7 +902,7 @@ export function ComfyWorkflowImportModal({
             }
             className="px-4 py-2 text-sm text-neutral-400 hover:text-neutral-200 transition-[color,scale] duration-150 active:scale-[0.96]"
           >
-            {!isMain || (inspection && !reconfigure) ? "Back" : "Cancel"}
+            {!isMain || (inspection && !reconfigure) ? "Back" : tc("Cancel")}
           </button>
           {/* Why the button is dead, said where the button is — otherwise the
               reason is a section away, under two screens of settings. */}
@@ -959,9 +960,7 @@ export function ComfyWorkflowImportModal({
               }}
               disabled={!savedPick}
               className={PRIMARY_BUTTON}
-            >
-              Add
-            </button>
+            >{tc("Add")}</button>
           ) : (
             // The Blueprint list confirms from here too, so the dialog has one
             // place where a choice is committed rather than one per step.
@@ -972,7 +971,7 @@ export function ComfyWorkflowImportModal({
                 disabled={!blueprintId || busy}
                 className={PRIMARY_BUTTON}
               >
-                {busy ? "Reading…" : "Add"}
+                {busy ? "Reading…" : tc("Add")}
               </button>
             )
           )}
@@ -1120,6 +1119,7 @@ function BlueprintPicker({
   onAdd: () => void;
   busy: boolean;
 }) {
+  const tc = useCanvasTranslation();
   const [filter, setFilter] = useState("");
 
   if (error) {
@@ -1130,9 +1130,7 @@ function BlueprintPicker({
           type="button"
           onClick={onRetry}
           className="px-3 py-2 text-xs rounded-lg bg-neutral-700 hover:bg-neutral-600 text-neutral-100 transition-[background-color,scale] duration-150 active:scale-[0.96]"
-        >
-          Try again
-        </button>
+        >{tc("Try again")}</button>
       </div>
     );
   }
@@ -1241,6 +1239,7 @@ function SavedNodePicker({
   onAdd: (entry: SavedComfyNode) => void;
   onDelete: (id: string) => void;
 }) {
+  const tc = useCanvasTranslation();
   // Deleting is not undoable — localStorage keeps no history — so it asks,
   // inline rather than through a system dialog stacked on top of this one.
   const [confirming, setConfirming] = useState<string | null>(null);
@@ -1298,9 +1297,7 @@ function SavedNodePicker({
                       setConfirming(null);
                     }}
                     className="px-2 py-1 text-[11px] rounded bg-red-500/15 text-red-300 hover:bg-red-500/25 transition-colors"
-                  >
-                    Delete
-                  </button>
+                  >{tc("Delete")}</button>
                   <button
                     type="button"
                     onClick={() => setConfirming(null)}
@@ -1370,6 +1367,7 @@ function ConfirmStep({
   ) => void;
   onToggleMediaInput: (candidate: ComfyNodeCandidate, type: ComfyInputType) => void;
 }) {
+  const tc = useCanvasTranslation();
   const [showAll, setShowAll] = useState(false);
   const [widgetFilter, setWidgetFilter] = useState("");
 
@@ -1495,7 +1493,7 @@ function ConfirmStep({
       </Section>
 
       <Section
-        title="Settings"
+        title={tc("Settings")}
         hint="Adjustable on the node itself."
         count={`${exposedCount} of ${inspection.widgetCandidates.length} exposed`}
         empty="This workflow has no adjustable widgets."

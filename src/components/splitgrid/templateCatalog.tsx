@@ -8,7 +8,7 @@
  */
 
 import type { ReactNode } from "react";
-import type { NodeType } from "@/types";
+import type { NodeType } from "../../leesfield/upstream-node-host";
 import { ALL_NODE_OPTIONS } from "../ConnectionDropMenu";
 
 export type TemplateHandleKind = "image" | "text";
@@ -66,17 +66,6 @@ export const TEMPLATE_NODE_CATALOG: TemplateCatalogEntry[] = [
       { id: "text", label: "Prompt", top: "65%" },
     ],
     outputs: [IMAGE_OUT],
-  },
-  {
-    type: "llmGenerate",
-    label: "LLM Generate",
-    title: "LLM Generate",
-    description: "AI text generation",
-    inputs: [
-      { id: "text", label: "Text", top: "35%" },
-      { id: "image", label: "Image", top: "65%" },
-    ],
-    outputs: [TEXT_OUT],
   },
   {
     type: "annotation",

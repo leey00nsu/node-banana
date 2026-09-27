@@ -1,7 +1,12 @@
 "use client";
+import { CanvasSelect } from "../../leesfield/inputs";
+
+
+import { useCanvasTranslation } from "../../leesfield/localization";
+import { Handle } from "../../leesfield/port-handle";
 
 import { memo, useMemo, useEffect, useLayoutEffect, useState, useCallback, useRef } from "react";
-import { Handle, Position, useUpdateNodeInternals, useReactFlow, NodeProps } from "@xyflow/react";
+import { Position, useUpdateNodeInternals, useReactFlow, NodeProps } from "@xyflow/react";
 import { BaseNode } from "./BaseNode";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { evaluateRule } from "@/store/utils/ruleEvaluation";
@@ -9,6 +14,7 @@ import { getConnectedInputsPure } from "@/store/utils/connectedInputs";
 import type { WorkflowNode, ConditionalSwitchNodeData, ConditionalSwitchRule, MatchMode } from "@/types";
 
 export const ConditionalSwitchNode = memo(({ id, data, selected }: NodeProps<WorkflowNode>) => {
+  const tc = useCanvasTranslation();
   const nodeData = data as ConditionalSwitchNodeData;
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
   const updateNodeInternals = useUpdateNodeInternals();
@@ -217,14 +223,12 @@ export const ConditionalSwitchNode = memo(({ id, data, selected }: NodeProps<Wor
           <button
             onClick={handleClear}
             className="nodrag nopan p-0.5 rounded transition-all duration-200 ease-in-out flex items-center overflow-hidden group pr-2 text-neutral-500 hover:text-neutral-200 border border-neutral-600 bg-neutral-800/90"
-            title="Clear evaluation"
+            title={tc("Clear evaluation")}
           >
             <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
-            <span className="text-[9px] whitespace-nowrap ml-1">
-              Clear
-            </span>
+            <span className="text-[9px] whitespace-nowrap ml-1">{tc("Clear")}</span>
           </button>
         </div>
       )}
@@ -249,7 +253,7 @@ export const ConditionalSwitchNode = memo(({ id, data, selected }: NodeProps<Wor
         {/* Text preview — fixed height, above the handle-aligned area */}
         <div className="text-[10px] text-neutral-400 truncate h-5 flex items-center">
           {nodeData.evaluationPaused ? (
-            <span className="text-yellow-400">Evaluation paused</span>
+            <span className="text-yellow-400">{tc("Evaluation paused")}</span>
           ) : incomingText ? (
             <>Input: &quot;{incomingText.slice(0, 50)}{incomingText.length > 50 ? "..." : ""}&quot;</>
           ) : (
@@ -284,7 +288,7 @@ export const ConditionalSwitchNode = memo(({ id, data, selected }: NodeProps<Wor
                 className="text-neutral-400 hover:text-white disabled:opacity-30 disabled:hover:text-neutral-400"
                 onClick={() => handleMoveUp(index)}
                 disabled={index === 0}
-                title="Move up"
+                title={tc("Move up")}
               >
                 <svg className="w-2 h-2" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M7 14l5-5 5 5z" />
@@ -294,7 +298,7 @@ export const ConditionalSwitchNode = memo(({ id, data, selected }: NodeProps<Wor
                 className="text-neutral-400 hover:text-white disabled:opacity-30 disabled:hover:text-neutral-400"
                 onClick={() => handleMoveDown(index)}
                 disabled={index === nodeData.rules.length - 1}
-                title="Move down"
+                title={tc("Move down")}
               >
                 <svg className="w-2 h-2" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M7 10l5 5 5-5z" />
@@ -329,7 +333,7 @@ export const ConditionalSwitchNode = memo(({ id, data, selected }: NodeProps<Wor
             )}
 
             {/* Mode dropdown */}
-            <select
+            <CanvasSelect
               className="bg-neutral-700 text-neutral-100 text-[9px] px-1 py-0.5 rounded border border-neutral-600 outline-none"
               value={rule.mode}
               onChange={(e) => handleModeChange(rule.id, e.target.value as MatchMode)}
@@ -338,7 +342,7 @@ export const ConditionalSwitchNode = memo(({ id, data, selected }: NodeProps<Wor
               <option value="contains">contains</option>
               <option value="starts-with">starts</option>
               <option value="ends-with">ends</option>
-            </select>
+            </CanvasSelect>
 
             {/* Value input */}
             <input
@@ -354,7 +358,7 @@ export const ConditionalSwitchNode = memo(({ id, data, selected }: NodeProps<Wor
               <button
                 className="opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-red-400 transition-opacity flex-shrink-0"
                 onClick={() => handleDelete(rule.id)}
-                title="Delete rule"
+                title={tc("Delete rule")}
               >
                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -376,7 +380,7 @@ export const ConditionalSwitchNode = memo(({ id, data, selected }: NodeProps<Wor
             )}
           </div>
 
-          <span className="text-[10px] text-neutral-300 ml-4">Fallback</span>
+          <span className="text-[10px] text-neutral-300 ml-4">{tc("Fallback")}</span>
         </div>
 
         {/* Add rule button — after Default so it doesn't displace handle alignment */}
@@ -386,9 +390,7 @@ export const ConditionalSwitchNode = memo(({ id, data, selected }: NodeProps<Wor
         >
           <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Add Rule
-        </button>
+          </svg>{tc("Add Rule")}</button>
       </div>
 
       {/* Output handles (right) - one per rule + default */}

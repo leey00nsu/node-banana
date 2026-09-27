@@ -1,4 +1,8 @@
 "use client";
+import { CanvasTextarea } from "../../leesfield/inputs";
+
+
+import { useCanvasTranslation } from "../../leesfield/localization";
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { WorkflowFile } from "@/store/workflowStore";
@@ -13,6 +17,7 @@ export function PromptWorkflowView({
   onBack,
   onWorkflowGenerated,
 }: PromptWorkflowViewProps) {
+  const tc = useCanvasTranslation();
   const [description, setDescription] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -110,7 +115,7 @@ export function PromptWorkflowView({
           <label className="text-xs font-medium text-neutral-400">
             Describe your workflow
           </label>
-          <textarea
+          <CanvasTextarea
             value={description}
             onChange={(e) => {
               setDescription(e.target.value);
@@ -157,9 +162,7 @@ export function PromptWorkflowView({
               <button
                 onClick={() => setError(null)}
                 className="text-xs text-red-400/70 hover:text-red-400 mt-1"
-              >
-                Dismiss
-              </button>
+              >{tc("Dismiss")}</button>
             </div>
           </div>
         )}

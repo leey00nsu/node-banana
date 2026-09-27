@@ -1,4 +1,8 @@
 "use client";
+import { CanvasInput } from "../../leesfield/inputs";
+
+
+import { useCanvasTranslation } from "../../leesfield/localization";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 
@@ -38,6 +42,7 @@ const MODES: Array<{ value: ComfyBackendMode; label: string; hint: string }> = [
  * models a workflow needs.
  */
 export function ComfySettingsTab({ settings, onChange }: ComfySettingsTabProps) {
+  const tc = useCanvasTranslation();
   const [testing, setTesting] = useState(false);
   const [result, setResult] = useState<ConnectionResult | null>(null);
   const [showKey, setShowKey] = useState(false);
@@ -165,7 +170,7 @@ export function ComfySettingsTab({ settings, onChange }: ComfySettingsTabProps) 
                 onClick={() => setShowKey((v) => !v)}
                 className="text-xs text-neutral-400 hover:text-neutral-200 shrink-0"
               >
-                {showKey ? "Hide" : "Show"}
+                {showKey ? "Hide" : tc("Show")}
               </button>
             </div>
             <a
@@ -276,9 +281,7 @@ export function ComfySettingsTab({ settings, onChange }: ComfySettingsTabProps) 
             strokeLinejoin="round"
           >
             <polyline points="9 18 15 12 9 6" />
-          </svg>
-          Advanced
-        </summary>
+          </svg>{tc("Advanced")}</summary>
 
         <div className="mt-3 p-3 bg-neutral-900 rounded-lg border border-neutral-700 space-y-3">
           <Field label="Comfy API-node key">
@@ -295,7 +298,7 @@ export function ComfySettingsTab({ settings, onChange }: ComfySettingsTabProps) 
                 onClick={() => setShowOrgKey((v) => !v)}
                 className="text-xs text-neutral-400 hover:text-neutral-200 shrink-0"
               >
-                {showOrgKey ? "Hide" : "Show"}
+                {showOrgKey ? "Hide" : tc("Show")}
               </button>
             </div>
             <p className="text-[10px] text-neutral-500 mt-1">
@@ -321,7 +324,7 @@ export function ComfySettingsTab({ settings, onChange }: ComfySettingsTabProps) 
           </Field>
 
           <label className="flex items-center gap-2 cursor-pointer">
-            <input
+            <CanvasInput
               type="checkbox"
               checked={settings.randomizeSeeds}
               onChange={(e) => update({ randomizeSeeds: e.target.checked })}
@@ -349,7 +352,7 @@ function ApiV2Toggle({
   return (
     <div>
       <label className="flex items-center gap-2 cursor-pointer">
-        <input
+        <CanvasInput
           type="checkbox"
           checked={checked}
           onChange={(e) => onChange(e.target.checked)}

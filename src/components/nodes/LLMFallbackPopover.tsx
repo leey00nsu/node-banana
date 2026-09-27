@@ -1,4 +1,8 @@
 "use client";
+import { CanvasSelect } from "../../leesfield/inputs";
+
+
+import { useCanvasTranslation } from "../../leesfield/localization";
 
 /**
  * LLMFallbackPopover
@@ -56,6 +60,7 @@ interface LLMFallbackPopoverProps {
 }
 
 export function LLMFallbackPopover({ nodeId, onClose }: LLMFallbackPopoverProps) {
+  const tc = useCanvasTranslation();
   const updateNodeData = useWorkflowStore((s) => s.updateNodeData);
   const node = useWorkflowStore((s) => s.nodes.find((n) => n.id === nodeId));
   const data = node?.data as LLMGenerateNodeData | undefined;
@@ -105,8 +110,8 @@ export function LLMFallbackPopover({ nodeId, onClose }: LLMFallbackPopoverProps)
           Select fallback LLM
         </h2>
 
-        <label className="block text-xs text-neutral-400 mb-1">Provider</label>
-        <select
+        <label className="block text-xs text-neutral-400 mb-1">{tc("Provider")}</label>
+        <CanvasSelect
           value={provider}
           onChange={(e) => setProvider(e.target.value as LLMProvider)}
           className="w-full mb-3 px-2 py-1.5 text-sm bg-neutral-800 border border-neutral-700 rounded text-neutral-200 focus:outline-none focus:ring-1 focus:ring-neutral-600"
@@ -116,10 +121,10 @@ export function LLMFallbackPopover({ nodeId, onClose }: LLMFallbackPopoverProps)
               {p.label}
             </option>
           ))}
-        </select>
+        </CanvasSelect>
 
-        <label className="block text-xs text-neutral-400 mb-1">Model</label>
-        <select
+        <label className="block text-xs text-neutral-400 mb-1">{tc("Model")}</label>
+        <CanvasSelect
           value={model}
           onChange={(e) => setModel(e.target.value as LLMModelType)}
           className="w-full mb-4 px-2 py-1.5 text-sm bg-neutral-800 border border-neutral-700 rounded text-neutral-200 focus:outline-none focus:ring-1 focus:ring-neutral-600"
@@ -129,28 +134,22 @@ export function LLMFallbackPopover({ nodeId, onClose }: LLMFallbackPopoverProps)
               {m.label}
             </option>
           ))}
-        </select>
+        </CanvasSelect>
 
         <div className="flex items-center justify-between gap-2">
           <button
             onClick={handleRemove}
             className="px-2 py-1 text-xs text-red-400 hover:text-red-300 transition-colors"
-          >
-            Remove fallback
-          </button>
+          >{tc("Remove fallback")}</button>
           <div className="flex gap-2">
             <button
               onClick={onClose}
               className="px-3 py-1 text-xs text-neutral-400 hover:text-neutral-200 transition-colors"
-            >
-              Cancel
-            </button>
+            >{tc("Cancel")}</button>
             <button
               onClick={handleSave}
               className="px-3 py-1 text-xs text-white bg-emerald-600 hover:bg-emerald-500 rounded transition-colors"
-            >
-              Save
-            </button>
+            >{tc("Save")}</button>
           </div>
         </div>
       </div>

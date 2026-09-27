@@ -1,14 +1,20 @@
 "use client";
 
+import { useCanvasTranslation } from "../../leesfield/localization";
+import { Handle } from "../../leesfield/port-handle";
+
 import { useCallback, useRef } from "react";
-import { Handle, Position, NodeProps, Node } from "@xyflow/react";
+import { Position, NodeProps, Node } from "@xyflow/react";
 import { BaseNode } from "./BaseNode";
-import { useWorkflowStore } from "@/store/workflowStore";
-import { VideoInputNodeData } from "@/types";
-import { useVideoBlobUrl } from "@/hooks/useVideoBlobUrl";
-import { downloadMedia } from "@/utils/downloadMedia";
-import { useShowHandleLabels } from "@/hooks/useShowHandleLabels";
 import { HandleLabel } from "./HandleLabel";
+import {
+  VideoInputNodeData,
+  HostedInputHistory,
+  downloadMedia,
+  useShowHandleLabels,
+  useVideoBlobUrl,
+  useWorkflowStore,
+} from "../../leesfield/upstream-node-host";
 
 type VideoInputNodeType = Node<VideoInputNodeData, "videoInput">;
 
@@ -17,8 +23,10 @@ const ACCEPTED_FORMATS = "video/mp4,video/webm,video/quicktime";
 const ACCEPTED_MIME_TYPES = ACCEPTED_FORMATS.split(",");
 
 export function VideoInputNode({ id, data, selected }: NodeProps<VideoInputNodeType>) {
+  const tc = useCanvasTranslation();
   const nodeData = data;
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
+  const writable = useWorkflowStore((state) => state.writable);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const showLabels = useShowHandleLabels(selected);
 
@@ -27,6 +35,7 @@ export function VideoInputNode({ id, data, selected }: NodeProps<VideoInputNodeT
 
   const handleFileChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (!writable) return;
       const file = e.target.files?.[0];
       if (!file) return;
 
@@ -76,13 +85,14 @@ export function VideoInputNode({ id, data, selected }: NodeProps<VideoInputNodeT
       };
       reader.readAsDataURL(file);
     },
-    [id, updateNodeData]
+    [id, updateNodeData, writable]
   );
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
+      if (!writable) return;
 
       const file = e.dataTransfer.files?.[0];
       if (!file) return;
@@ -94,7 +104,7 @@ export function VideoInputNode({ id, data, selected }: NodeProps<VideoInputNodeT
         fileInputRef.current.dispatchEvent(new Event("change", { bubbles: true }));
       }
     },
-    []
+    [writable]
   );
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -103,6 +113,7 @@ export function VideoInputNode({ id, data, selected }: NodeProps<VideoInputNodeT
   }, []);
 
   const handleRemove = useCallback(() => {
+    if (!writable) return;
     updateNodeData(id, {
       video: null,
       videoRef: undefined,
@@ -111,7 +122,7 @@ export function VideoInputNode({ id, data, selected }: NodeProps<VideoInputNodeT
       dimensions: null,
       format: null,
     });
-  }, [id, updateNodeData]);
+  }, [id, updateNodeData, writable]);
 
   return (
     <BaseNode
@@ -125,6 +136,7 @@ export function VideoInputNode({ id, data, selected }: NodeProps<VideoInputNodeT
         ref={fileInputRef}
         type="file"
         accept={ACCEPTED_FORMATS}
+        disabled={!writable}
         onChange={handleFileChange}
         className="hidden"
       />
@@ -138,13 +150,11 @@ export function VideoInputNode({ id, data, selected }: NodeProps<VideoInputNodeT
             preload="metadata"
           />
           {nodeData.isOptional && (
-            <span className="absolute bottom-2 left-2 text-[9px] font-medium text-neutral-300 bg-black/50 px-1.5 py-0.5 rounded">
-              Optional
-            </span>
+            <span className="absolute bottom-2 left-2 text-[9px] font-medium text-neutral-300 bg-black/50 px-1.5 py-0.5 rounded">{tc("Optional")}</span>
           )}
           <button
             onClick={() => downloadMedia(nodeData.video!, "video")}
-            aria-label="Download video"
+            aria-label={tc("Download video")}
             className="absolute top-2 right-10 w-6 h-6 bg-black/60 hover:bg-black/80 text-white rounded text-xs opacity-0 group-hover:opacity-100 focus:opacity-100 transition-all flex items-center justify-center"
           >
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -153,7 +163,8 @@ export function VideoInputNode({ id, data, selected }: NodeProps<VideoInputNodeT
           </button>
           <button
             onClick={handleRemove}
-            aria-label="Remove video"
+            disabled={!writable}
+            aria-label={tc("Remove video")}
             className="absolute top-2 right-2 w-6 h-6 bg-black/60 hover:bg-red-600/80 text-white rounded text-xs opacity-0 group-hover:opacity-100 focus:opacity-100 focus:ring-1 focus:ring-red-400 transition-all flex items-center justify-center"
           >
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -164,20 +175,23 @@ export function VideoInputNode({ id, data, selected }: NodeProps<VideoInputNodeT
       ) : (
         <div
           role="button"
-          tabIndex={0}
-          aria-label="Upload video file"
-          onClick={() => fileInputRef.current?.click()}
-          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileInputRef.current?.click(); } }}
+          tabIndex={writable ? 0 : -1}
+          aria-label={tc("Upload video file")}
+          aria-disabled={!writable}
+          onClick={() => { if (writable) fileInputRef.current?.click(); }}
+          onKeyDown={(e) => { if (writable && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); fileInputRef.current?.click(); } }}
           onDrop={handleDrop}
           onDragOver={handleDragOver}
-          className={`w-full h-full bg-neutral-900/40 flex flex-col items-center justify-center cursor-pointer hover:bg-neutral-900/60 transition-colors ${nodeData.isOptional ? "border-2 border-dashed border-neutral-600" : ""}`}
+          className={`w-full h-full bg-neutral-900/40 flex flex-col items-center justify-center transition-colors ${writable ? "cursor-pointer hover:bg-neutral-900/60" : "cursor-not-allowed opacity-60"} ${nodeData.isOptional ? "border-2 border-dashed border-neutral-600" : ""}`}
         >
           <svg className="w-8 h-8 text-neutral-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z" />
           </svg>
-          <span className="text-xs text-neutral-500 mt-2">{nodeData.isOptional ? "Optional" : "Drop video or click"}</span>
+          <span className="text-xs text-neutral-500 mt-2">{nodeData.isOptional ? tc("Optional") : tc("Drop video or click")}</span>
         </div>
       )}
+
+      <HostedInputHistory nodeId={id} mediaType="video" selectedAssetId={nodeData.config?.assetId ?? null} />
 
       <Handle
         type="target"
@@ -185,14 +199,14 @@ export function VideoInputNode({ id, data, selected }: NodeProps<VideoInputNodeT
         id="video"
         data-handletype="video"
       />
-      <HandleLabel label="Video" side="target" color="var(--handle-color-video)" visible={showLabels} />
+      <HandleLabel label={tc("Video")} side="target" color="var(--handle-color-video)" visible={showLabels} />
       <Handle
         type="source"
         position={Position.Right}
         id="video"
         data-handletype="video"
       />
-      <HandleLabel label="Video" side="source" color="var(--handle-color-video)" visible={showLabels} />
+      <HandleLabel label={tc("Video")} side="source" color="var(--handle-color-video)" visible={showLabels} />
     </BaseNode>
   );
 }

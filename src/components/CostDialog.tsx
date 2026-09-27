@@ -1,5 +1,7 @@
 "use client";
 
+import { useCanvasTranslation } from "../leesfield/localization";
+
 import { useEffect } from "react";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { PredictedCostResult, CostBreakdownItem, formatCost } from "@/utils/costCalculator";
@@ -92,6 +94,7 @@ function ExternalLinkIcon() {
 }
 
 export function CostDialog({ predictedCost, incurredCost, onClose }: CostDialogProps) {
+  const tc = useCanvasTranslation();
   const resetIncurredCost = useWorkflowStore((state) => state.resetIncurredCost);
 
   useEffect(() => {
@@ -183,7 +186,7 @@ export function CostDialog({ predictedCost, incurredCost, onClose }: CostDialogP
               <div className="flex items-center justify-between mb-3">
                 <span className="text-sm text-neutral-300">External Providers</span>
                 <span className="text-xs text-neutral-500">
-                  {externalNodeCount} node{externalNodeCount !== 1 ? "s" : ""}
+                  {externalNodeCount}{tc("node")}{externalNodeCount !== 1 ? "s" : ""}
                 </span>
               </div>
 

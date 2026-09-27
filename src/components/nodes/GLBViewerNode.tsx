@@ -1,7 +1,10 @@
 "use client";
 
+import { useCanvasTranslation } from "../../leesfield/localization";
+import { Handle } from "../../leesfield/port-handle";
+
 import { useCallback, useRef, useState, useEffect, Suspense } from "react";
-import { Handle, Position, NodeProps, Node } from "@xyflow/react";
+import { Position, NodeProps, Node } from "@xyflow/react";
 import { Canvas, useThree, useFrame } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import { BaseNode } from "./BaseNode";
@@ -204,6 +207,7 @@ function LoadingIndicator() {
 }
 
 export function GLBViewerNode({ id, data, selected }: NodeProps<GLBViewerNodeType>) {
+  const tc = useCanvasTranslation();
   const nodeData = data as GLBViewerNodeData;
   const adaptiveCapturedImage = useAdaptiveImageSrc(nodeData.capturedImage, id);
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
@@ -480,15 +484,11 @@ export function GLBViewerNode({ id, data, selected }: NodeProps<GLBViewerNodeTyp
                   <button
                     onClick={() => downloadMedia(nodeData.capturedImage!, "image")}
                     className="text-[10px] text-neutral-500 hover:text-neutral-300 transition-colors"
-                  >
-                    Download
-                  </button>
+                  >{tc("Download")}</button>
                   <button
                     onClick={() => updateNodeData(id, { capturedImage: null })}
                     className="text-[10px] text-neutral-500 hover:text-neutral-300 transition-colors"
-                  >
-                    Clear
-                  </button>
+                  >{tc("Clear")}</button>
                 </div>
               </div>
               <img
@@ -533,7 +533,7 @@ export function GLBViewerNode({ id, data, selected }: NodeProps<GLBViewerNodeTyp
         style={{ top: "50%" }}
         data-handletype="image"
       />
-      <HandleLabel label="Image" side="source" color="var(--handle-color-image)" visible={showLabels} />
+      <HandleLabel label={tc("Image")} side="source" color="var(--handle-color-image)" visible={showLabels} />
     </BaseNode>
   );
 }

@@ -1,7 +1,12 @@
 "use client";
+import { CanvasInput } from "../../leesfield/inputs";
+
+
+import { useCanvasTranslation } from "../../leesfield/localization";
+import { Handle } from "../../leesfield/port-handle";
 
 import { memo, useMemo, useEffect, useState, useCallback } from "react";
-import { Handle, Position, useUpdateNodeInternals, useReactFlow, NodeProps } from "@xyflow/react";
+import { Position, useUpdateNodeInternals, useReactFlow, NodeProps } from "@xyflow/react";
 import { BaseNode } from "./BaseNode";
 import { useWorkflowStore } from "@/store/workflowStore";
 import type { WorkflowNode, SwitchNodeData, HandleType } from "@/types";
@@ -16,6 +21,7 @@ const HANDLE_COLORS: Record<HandleType, string> = {
 };
 
 export const SwitchNode = memo(({ id, data, selected }: NodeProps<WorkflowNode>) => {
+  const tc = useCanvasTranslation();
   const nodeData = data as SwitchNodeData;
   const edges = useWorkflowStore((state) => state.edges);
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
@@ -173,9 +179,7 @@ export const SwitchNode = memo(({ id, data, selected }: NodeProps<WorkflowNode>)
       {/* Body content */}
       <div className="px-2 py-1 space-y-1">
         {!showOutputs ? (
-          <div className="text-[10px] text-neutral-500 text-center py-2">
-            Connect input to enable outputs
-          </div>
+          <div className="text-[10px] text-neutral-500 text-center py-2">{tc("Connect input to enable outputs")}</div>
         ) : (
           <>
             {nodeData.switches.map((sw, index) => (
@@ -185,7 +189,7 @@ export const SwitchNode = memo(({ id, data, selected }: NodeProps<WorkflowNode>)
               >
                 {/* Toggle */}
                 <label className="relative inline-flex items-center cursor-pointer">
-                  <input
+                  <CanvasInput
                     type="checkbox"
                     className="sr-only peer"
                     checked={sw.enabled}
@@ -228,7 +232,7 @@ export const SwitchNode = memo(({ id, data, selected }: NodeProps<WorkflowNode>)
                   <button
                     className="opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-red-400 transition-opacity"
                     onClick={() => handleDelete(sw.id)}
-                    title="Delete switch"
+                    title={tc("Delete switch")}
                   >
                     <svg
                       className="w-3 h-3"
@@ -265,9 +269,7 @@ export const SwitchNode = memo(({ id, data, selected }: NodeProps<WorkflowNode>)
                   strokeWidth={2}
                   d="M12 4v16m8-8H4"
                 />
-              </svg>
-              Add Switch
-            </button>
+              </svg>{tc("Add Switch")}</button>
           </>
         )}
       </div>

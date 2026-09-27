@@ -13,7 +13,7 @@ import {
   Mp4OutputFormat,
   getFirstEncodableAudioCodec,
 } from 'mediabunny';
-import { createAvcEncodingConfig, AVC_LEVEL_4_0, AVC_LEVEL_5_1 } from '@/lib/video-encoding';
+import { createAvcEncodingConfig, AVC_LEVEL_4_0, AVC_LEVEL_5_1 } from '../lib/video-encoding';
 import {
   DEFAULT_BITRATE,
   MAX_OUTPUT_FPS,
@@ -21,7 +21,7 @@ import {
   FALLBACK_HEIGHT,
   BASELINE_PIXEL_LIMIT,
   probeVideoMetadata,
-} from '@/lib/video-probing';
+} from '../lib/video-probing';
 
 // Re-export encoder support check from useStitchVideos (same encoder)
 export { checkEncoderSupport } from './useStitchVideos';
@@ -42,7 +42,8 @@ export async function trimVideoAsync(
   startTime: number,
   endTime: number,
   onProgress?: (progress: TrimProgress) => void,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  preserveAudio: boolean = true
 ): Promise<Blob> {
   const updateProgress = (
     status: TrimProgress['status'],
@@ -108,7 +109,7 @@ export async function trimVideoAsync(
       updateProgress('processing', 'Setting up encoder...', 10);
 
       videoSource = new VideoSampleSource(
-        createAvcEncodingConfig(resolvedBitrate, safeWidth, safeHeight, codecProfile)
+        createAvcEncodingConfig(resolvedBitrate, safeWidth, safeHeight, codecProfile, undefined, false)
       );
 
       const bufferTarget = new BufferTarget();
@@ -123,6 +124,7 @@ export async function trimVideoAsync(
       let pendingAudioBuffer: AudioBuffer | null = null;
       const trimDuration = endTime - startTime;
 
+      if (preserveAudio) {
       try {
         const audioTracks = await input.getAudioTracks();
         if (audioTracks.length > 0) {
@@ -202,6 +204,7 @@ export async function trimVideoAsync(
         // A user Stop must not be swallowed by the graceful audio-degradation path.
         if (audioErr instanceof DOMException && audioErr.name === "AbortError") throw audioErr;
         console.warn('Audio extraction failed, continuing without audio:', audioErr);
+      }
       }
 
       await output.start();

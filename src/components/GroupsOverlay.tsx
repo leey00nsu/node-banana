@@ -1,11 +1,13 @@
 "use client";
 
+import { useCanvasTranslation } from "../leesfield/localization";
+
 import { memo, useCallback, useState, useRef, useEffect } from "react";
 import { useStore, ViewportPortal, type ReactFlowState } from "@xyflow/react";
 import { useShallow } from "zustand/shallow";
-import { useWorkflowStore, GROUP_COLORS } from "@/store/workflowStore";
-import { GroupColor } from "@/types";
-import { isOverviewZoom } from "@/utils/canvasPerformance";
+import { useWorkflowStore, GROUP_COLORS } from "../leesfield/upstream-node-host";
+import { GroupColor } from "../leesfield/upstream-node-host";
+import { isOverviewZoom } from "../utils/canvasPerformance";
 
 const COLOR_OPTIONS: { color: GroupColor; label: string }[] = [
   { color: "neutral", label: "Gray" },
@@ -66,9 +68,12 @@ const GroupControls = memo(function GroupControls({
   zoom,
   showInteractiveControls,
 }: GroupControlsProps) {
-  const { group, updateGroup, deleteGroup, moveGroupNodes, toggleGroupLock } =
+  const tc = useCanvasTranslation();
+  const { group, updateGroup, deleteGroup, moveGroupNodes, toggleGroupLock, beginGroupInteraction, endGroupInteraction } =
     useWorkflowStore(
       useShallow((state) => ({
+        beginGroupInteraction: state.beginGroupInteraction,
+        endGroupInteraction: state.endGroupInteraction,
         group: state.groups[groupId],
         updateGroup: state.updateGroup,
         deleteGroup: state.deleteGroup,
@@ -181,10 +186,11 @@ const GroupControls = memo(function GroupControls({
       }
       e.stopPropagation();
       e.preventDefault();
+      beginGroupInteraction();
       setIsDragging(true);
       dragStartRef.current = { x: e.clientX, y: e.clientY };
     },
-    []
+    [beginGroupInteraction]
   );
 
   // Resize handlers
@@ -192,6 +198,7 @@ const GroupControls = memo(function GroupControls({
     (e: React.MouseEvent, handle: string) => {
       e.stopPropagation();
       e.preventDefault();
+      beginGroupInteraction();
       setIsResizing(true);
       setResizeHandle(handle);
       resizeStartRef.current = {
@@ -203,7 +210,7 @@ const GroupControls = memo(function GroupControls({
         posY: group.position.y,
       };
     },
-    [group?.size, group?.position]
+    [beginGroupInteraction, group?.size, group?.position]
   );
 
   useEffect(() => {
@@ -230,6 +237,7 @@ const GroupControls = memo(function GroupControls({
     };
 
     const handleMouseUp = () => {
+      endGroupInteraction();
       setIsDragging(false);
       dragStartRef.current = null;
     };
@@ -241,7 +249,7 @@ const GroupControls = memo(function GroupControls({
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [isDragging, groupId, group?.position, moveGroupNodes, updateGroup, zoom]);
+  }, [endGroupInteraction, isDragging, groupId, group?.position, moveGroupNodes, updateGroup, zoom]);
 
   useEffect(() => {
     if (!isResizing || !resizeHandle) return;
@@ -282,6 +290,7 @@ const GroupControls = memo(function GroupControls({
     };
 
     const handleMouseUp = () => {
+      endGroupInteraction();
       setIsResizing(false);
       setResizeHandle(null);
       resizeStartRef.current = null;
@@ -294,7 +303,7 @@ const GroupControls = memo(function GroupControls({
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [isResizing, resizeHandle, groupId, updateGroup, zoom]);
+  }, [endGroupInteraction, isResizing, resizeHandle, groupId, updateGroup, zoom]);
 
   if (!group) return null;
 
@@ -374,7 +383,7 @@ const GroupControls = memo(function GroupControls({
               <button
                 onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu); }}
                 className="w-6 h-6 rounded-md flex flex-col items-center justify-center gap-[2px] hover:bg-white/20 transition-colors"
-                title="Group options"
+                title={tc("Group options")}
               >
                 <div className="w-[3px] h-[3px] rounded-full bg-white/70" />
                 <div className="w-[3px] h-[3px] rounded-full bg-white/70" />
@@ -383,7 +392,7 @@ const GroupControls = memo(function GroupControls({
 
               {/* Vertical context menu - appears above the three-dot button */}
               {showMenu && (
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 bg-neutral-800/90 backdrop-blur rounded-lg py-1 min-w-[130px] shadow-lg shadow-black/30" ref={colorPickerRef}>
+                <div data-node-banana-group-menu className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 bg-neutral-800/90 backdrop-blur rounded-lg py-1 min-w-[130px] shadow-lg shadow-black/30" ref={colorPickerRef}>
                   {/* Color fan - anchored to top-left corner of menu */}
                   {showColorPicker && (
                     <>
@@ -456,7 +465,7 @@ const GroupControls = memo(function GroupControls({
                       className="w-3 h-3 rounded-full border border-white/30"
                       style={{ backgroundColor: bgColor }}
                     />
-                    <span>Background</span>
+                    <span>{tc("Background")}</span>
                   </button>
 
                   {/* Lock/Unlock row */}
@@ -473,23 +482,7 @@ const GroupControls = memo(function GroupControls({
                         <path strokeLinecap="round" strokeLinejoin="round" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
                       </svg>
                     )}
-                    <span>{group.locked ? "Unlock" : "Lock"}</span>
-                  </button>
-
-                  {/* NBP Input toggle row */}
-                  <button
-                    onClick={(e) => { e.stopPropagation(); updateGroup(groupId, { isNbpInput: !group.isNbpInput }); setShowMenu(false); }}
-                    className="flex items-center gap-2 px-3 py-1.5 w-full hover:bg-white/10 text-xs text-white/80 transition-colors"
-                  >
-                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
-                    </svg>
-                    <span>NBP Input</span>
-                    {group.isNbpInput && (
-                      <svg className="w-3 h-3 ml-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                      </svg>
-                    )}
+                    <span>{group.locked ? tc("Unlock") : tc("Lock")}</span>
                   </button>
 
                   {/* Delete row */}
@@ -500,7 +493,7 @@ const GroupControls = memo(function GroupControls({
                     <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                     </svg>
-                    <span>Delete</span>
+                    <span>{tc("Delete")}</span>
                   </button>
                 </div>
               )}
@@ -574,7 +567,8 @@ export function GroupBackgroundsPortal() {
 export function GroupControlsOverlay() {
   const groupIds = useWorkflowStore(useShallow((state) => Object.keys(state.groups)));
   const zoom = useStore(selectViewportZoom);
-  const showInteractiveControls = !isOverviewZoom(zoom);
+  const writable = useWorkflowStore((state) => state.writable);
+  const showInteractiveControls = writable && !isOverviewZoom(zoom);
 
   if (groupIds.length === 0) return null;
 

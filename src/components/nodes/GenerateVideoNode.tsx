@@ -1,29 +1,41 @@
 "use client";
 
+import { useCanvasTranslation } from "../../leesfield/localization";
+import { Handle } from "../../leesfield/port-handle";
+
 import React, { useCallback, useState, useEffect, useMemo } from "react";
-import { Handle, Position, NodeProps, Node, useReactFlow } from "@xyflow/react";
+import { Position, NodeProps, Node, useReactFlow, useUpdateNodeInternals } from "@xyflow/react";
 import { BaseNode } from "./BaseNode";
-import { ModelParameters } from "./ModelParameters";
-import { useWorkflowStore, useProviderApiKeys } from "@/store/workflowStore";
-import { deduplicatedFetch } from "@/utils/deduplicatedFetch";
-import { GenerateVideoNodeData, ProviderType, SelectedModel, ModelInputDef } from "@/types";
-import { ProviderModel, ModelCapability } from "@/lib/providers/types";
-import { ModelSearchDialog } from "@/components/modals/ModelSearchDialog";
-import { getVideoDimensions } from "@/utils/nodeDimensions";
-import { ProviderBadge } from "./ProviderBadge";
-import { useVideoBlobUrl } from "@/hooks/useVideoBlobUrl";
-import { useVideoAutoplay } from "@/hooks/useVideoAutoplay";
-import { useInlineParameters } from "@/hooks/useInlineParameters";
-import { InlineParameterPanel } from "./InlineParameterPanel";
-import { SettingsTabBar } from "./SettingsTabBar";
-import { browseRegistry } from "@/utils/browseRegistry";
-import { downloadMedia } from "@/utils/downloadMedia";
-import { useShowHandleLabels } from "@/hooks/useShowHandleLabels";
 import { HandleLabel } from "./HandleLabel";
-import { useLoadGenerationById } from "@/hooks/useLoadGenerationById";
-import { useGenerationCarousel } from "@/hooks/useGenerationCarousel";
-import { useErrorToast } from "@/hooks/useErrorToast";
-import { useAutoResizeOnMedia } from "@/hooks/useAutoResizeOnMedia";
+import { InlineParameterPanel } from "./InlineParameterPanel";
+import { ModelParameters } from "./ModelParameters";
+import { ModelSearchDialog } from "../modals/ModelSearchDialog";
+import { ProviderBadge } from "./ProviderBadge";
+import { SettingsTabBar } from "./SettingsTabBar";
+import { downloadMedia } from "../../utils/downloadMedia";
+import { getVideoDimensions } from "../../utils/nodeDimensions";
+import {
+  GenerateVideoNodeData,
+  HostedGenerationPrompt,
+  ModelCapability,
+  ModelInputDef,
+  ProviderModel,
+  ProviderType,
+  SelectedModel,
+  browseRegistry,
+  deduplicatedFetch,
+  useAdaptiveImageSrc,
+  useAutoResizeOnMedia,
+  useErrorToast,
+  useGenerationCarousel,
+  useInlineParameters,
+  useLoadGenerationById,
+  useProviderApiKeys,
+  useShowHandleLabels,
+  useVideoAutoplay,
+  useVideoBlobUrl,
+  useWorkflowStore,
+} from "../../leesfield/upstream-node-host";
 
 // Video generation capabilities
 const VIDEO_CAPABILITIES: ModelCapability[] = ["text-to-video", "image-to-video", "audio-to-video"];
@@ -51,6 +63,7 @@ function buildVeoInputSchema(modelId: string): ModelInputDef[] | undefined {
 type GenerateVideoNodeType = Node<GenerateVideoNodeData, "generateVideo">;
 
 export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVideoNodeType>) {
+  const tc = useCanvasTranslation();
   const nodeData = data;
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
   // Use stable selector for API keys to prevent unnecessary re-fetches
@@ -150,7 +163,7 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
   }, [fetchModels]);
 
   // Inline parameters: compute collapse state and toggle handler
-  const isParamsExpanded = nodeData.parametersExpanded ?? true; // default expanded
+  const isParamsExpanded = nodeData.parametersExpanded ?? false;
 
   const handleToggleParams = useCallback(() => {
     updateNodeData(id, { parametersExpanded: !isParamsExpanded });
@@ -196,7 +209,7 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
   );
 
   const handleClearVideo = useCallback(() => {
-    updateNodeData(id, { outputVideo: null, status: "idle", error: null });
+    updateNodeData(id, { outputVideo: null, selectedOutputAssetId: null, status: "idle", error: null });
   }, [id, updateNodeData]);
 
   const handleParametersChange = useCallback(
@@ -216,6 +229,11 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
 
   // Handle parameters expand/collapse - resize node height
   const { setNodes } = useReactFlow();
+  const providerInputSignature=JSON.stringify(nodeData.providerInputSchema);
+  const updateNodeInternals = useUpdateNodeInternals();
+  useEffect(() => {
+    updateNodeInternals(id);
+  }, [id, nodeData.inputSchema, nodeData.supportsImageInput, providerInputSignature, updateNodeInternals]);
   const handleParametersExpandChange = useCallback(
     (expanded: boolean, parameterCount: number) => {
       // Each parameter row is ~24px, plus some padding
@@ -256,6 +274,9 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
     loadFn: loadVideoById,
     buildUpdate: (video, newIndex) => ({
       outputVideo: video,
+      selectedOutputAssetId: typeof nodeData.videoHistory?.[newIndex]?.id === "string"
+        ? nodeData.videoHistory[newIndex].id
+        : null,
       selectedVideoHistoryIndex: newIndex,
       status: "idle",
       error: null,
@@ -307,6 +328,7 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
       isExecuting={isRunning}
       hasError={nodeData.status === "error"}
       fullBleed
+      contentClassName="flex flex-col flex-1 min-h-0 relative"
       settingsExpanded={inlineParametersEnabled && isParamsExpanded}
       aspectFitMedia={nodeData.outputVideo}
       settingsPanel={inlineParametersEnabled ? (
@@ -349,16 +371,18 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
       ) : undefined}
     >
       {/* Dynamic input handles based on model schema */}
-      {nodeData.inputSchema && nodeData.inputSchema.length > 0 ? (
+      {((nodeData as unknown as {providerInputSchema?:ModelInputDef[]}).providerInputSchema || (nodeData.inputSchema && nodeData.inputSchema.length > 0)) ? (
         // Render handles from schema, sorted by type (images first, text second)
         // IMPORTANT: Always render "image" and "text" handles to maintain connection
         // compatibility. Schema may only have text inputs (text-to-video models) but
         // we still need the image handle to preserve connections made before model selection.
         (() => {
-          const imageInputs = nodeData.inputSchema!.filter(i => i.type === "image");
-          const videoInputs = nodeData.inputSchema!.filter(i => i.type === "video");
-          const audioInputs = nodeData.inputSchema!.filter(i => i.type === "audio");
-          const textInputs = nodeData.inputSchema!.filter(i => i.type === "text");
+          const providerInputs=(nodeData as unknown as {providerInputSchema?:ModelInputDef[]}).providerInputSchema;
+          const imageInputs:ModelInputDef[]=providerInputs?.filter(f=>f.type==="image") ?? (nodeData.supportsImageInput?[{name:"image",type:"image",required:false,label:"Image"}]:[]);
+          const videoInputs:ModelInputDef[]=providerInputs?.filter(f=>f.type==="video")??[];
+          const audioInputs:ModelInputDef[]=providerInputs?.filter(f=>f.type==="audio")??[];
+          const textInputs = [{name:"prompt",type:"text" as const,required:(nodeData as unknown as {requiresPrompt?:boolean}).requiresPrompt!==false,label:"Prompt",description:undefined}];
+
 
           // Always include at least one image and one text handle for connection stability
           const hasImageInput = imageInputs.length > 0;
@@ -380,22 +404,13 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
           if (hasImageInput) {
             imageInputs.forEach((input, index) => {
               handles.push({
-                id: `image-${index}`,
+                id: providerInputs ? input.name : index === 0 ? "image" : `image-${index}`,
                 type: "image",
                 label: input.label,
                 schemaName: input.name,
                 description: input.description || null,
                 isPlaceholder: false,
               });
-            });
-          } else {
-            handles.push({
-              id: "image",
-              type: "image",
-              label: "Image",
-              schemaName: null,
-              description: "Not used by this model",
-              isPlaceholder: true,
             });
           }
 
@@ -404,7 +419,7 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
           if (hasVideoInput) {
             videoInputs.forEach((input, index) => {
               handles.push({
-                id: `video-${index}`,
+                id: providerInputs ? input.name : `video-${index}`,
                 type: "video",
                 label: input.label,
                 schemaName: input.name,
@@ -412,22 +427,13 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
                 isPlaceholder: false,
               });
             });
-          } else {
-            handles.push({
-              id: "video",
-              type: "video",
-              label: "Video",
-              schemaName: null,
-              description: "Not used by this model",
-              isPlaceholder: true,
-            });
           }
 
           // Add audio handles from schema (no placeholder — audio is not a default input)
           if (hasAudioInput) {
             audioInputs.forEach((input, index) => {
               handles.push({
-                id: `audio-${index}`,
+                id: providerInputs ? input.name : `audio-${index}`,
                 type: "audio",
                 label: input.label,
                 schemaName: input.name,
@@ -441,7 +447,7 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
           if (hasTextInput) {
             textInputs.forEach((input, index) => {
               handles.push({
-                id: `text-${index}`,
+                id: index === 0 ? "text" : `text-${index}`,
                 type: "text",
                 label: input.label,
                 schemaName: input.name,
@@ -522,68 +528,25 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
           return (
             <>
               {renderedHandles}
-              {hasImageInput && (
-                <Handle
-                  type="target"
-                  position={Position.Left}
-                  id="image"
-                  style={{ top: "35%", opacity: 0, pointerEvents: "none" }}
-                  isConnectable={false}
-                />
-              )}
-              {hasVideoInput && (
-                <Handle
-                  type="target"
-                  position={Position.Left}
-                  id="video"
-                  style={{ top: "42%", opacity: 0, pointerEvents: "none" }}
-                  isConnectable={false}
-                />
-              )}
-              {hasAudioInput && (
-                <Handle
-                  type="target"
-                  position={Position.Left}
-                  id="audio"
-                  style={{ top: "50%", opacity: 0, pointerEvents: "none" }}
-                  isConnectable={false}
-                />
-              )}
-              {hasTextInput && (
-                <Handle
-                  type="target"
-                  position={Position.Left}
-                  id="text"
-                  style={{ top: "65%", opacity: 0, pointerEvents: "none" }}
-                  isConnectable={false}
-                />
-              )}
             </>
           );
         })()
       ) : (
         // Default handles when no schema
         <>
-          <Handle
-            type="target"
-            position={Position.Left}
-            id="image"
-            style={{ top: "35%", zIndex: 10 }}
-            data-handletype="image"
-            isConnectable={true}
-          />
-          {/* Default image label */}
-          <HandleLabel label="Image" side="target" color="var(--handle-color-image)" top="calc(35% - 18px)" visible={showLabels} />
-          <Handle
-            type="target"
-            position={Position.Left}
-            id="video"
-            style={{ top: "50%", zIndex: 10 }}
-            data-handletype="video"
-            isConnectable={true}
-          />
-          {/* Default video label */}
-          <HandleLabel label="Video" side="target" color="var(--handle-color-video)" top="calc(50% - 18px)" visible={showLabels} />
+          {nodeData.supportsImageInput && (
+            <>
+              <Handle
+                type="target"
+                position={Position.Left}
+                id="image"
+                style={{ top: "35%", zIndex: 10 }}
+                data-handletype="image"
+                isConnectable={true}
+              />
+              <HandleLabel label={tc("Image")} side="target" color="var(--handle-color-image)" top="calc(35% - 18px)" visible={showLabels} />
+            </>
+          )}
           <Handle
             type="target"
             position={Position.Left}
@@ -592,7 +555,7 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
             data-handletype="text"
           />
           {/* Default text label */}
-          <HandleLabel label="Prompt" side="target" color="var(--handle-color-text)" top="calc(65% - 18px)" visible={showLabels} />
+          <HandleLabel label={tc("Prompt")} side="target" color="var(--handle-color-text)" top="calc(65% - 18px)" visible={showLabels} />
         </>
       )}
       {/* Video output */}
@@ -604,9 +567,16 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
         style={{ zIndex: 10 }}
       />
       {/* Output label */}
-      <HandleLabel label="Video" side="source" color="var(--handle-color-video)" visible={showLabels} />
+      <HandleLabel label={tc("Video")} side="source" color="var(--handle-color-video)" visible={showLabels} />
 
-      <div className="relative w-full h-full min-h-0 overflow-hidden rounded-lg">
+      <HostedGenerationPrompt
+        nodeId={id}
+        value={nodeData.internalPrompt}
+        connectedValue={nodeData.prompt}
+        connected={nodeData.promptConnected === true}
+      />
+
+      <div className="relative w-full flex-1 min-h-0 overflow-hidden rounded-lg">
         {/* Preview area */}
         {nodeData.outputVideo ? (
           <>
@@ -617,16 +587,16 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
               controls
               loop
               muted
-              className="w-full h-full object-cover"
+              className="nodrag nopan w-full h-full object-contain"
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={(event) => event.stopPropagation()}
               playsInline
             />
             {nodeData.__usedFallback && (
               <div
                 className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-emerald-900/70 text-emerald-300 text-[9px] font-medium pointer-events-auto z-10"
                 title={`Primary failed: ${nodeData.__primaryError ?? "unknown"}\nUsed fallback: ${nodeData.__fallbackModelUsed ?? ""}`}
-              >
-                Fallback used
-              </div>
+              >{tc("Fallback used")}</div>
             )}
             {/* Loading overlay for generation */}
             {nodeData.status === "loading" && (
@@ -664,8 +634,8 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
                 >
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                <span className="text-white text-xs font-medium">Generation failed</span>
-                <span className="text-white/70 text-[10px]">See toast for details</span>
+                <span className="text-white text-xs font-medium">{tc("Generation failed")}</span>
+                <span className="text-white/70 text-[10px]">{tc("See toast for details")}</span>
               </div>
             )}
             {/* Loading overlay for carousel navigation */}
@@ -697,7 +667,7 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
               <button
                 onClick={() => downloadMedia(nodeData.outputVideo!, "video").catch(() => {})}
                 className="w-5 h-5 bg-neutral-900/80 hover:bg-neutral-700 rounded flex items-center justify-center text-neutral-400 hover:text-white transition-colors"
-                title="Download video"
+                title={tc("Download video")}
               >
                 <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
@@ -706,7 +676,7 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
               <button
                 onClick={handleClearVideo}
                 className="w-5 h-5 bg-neutral-900/80 hover:bg-red-600/80 rounded flex items-center justify-center text-neutral-400 hover:text-white transition-colors"
-                title="Clear video"
+                title={tc("Clear video")}
               >
                 <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -721,7 +691,7 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
                   onClick={handleCarouselPrevious}
                   disabled={isLoadingCarouselVideo}
                   className="w-5 h-5 rounded hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-white/70 hover:text-white transition-colors"
-                  title="Previous video"
+                  title={tc("Previous video")}
                 >
                   <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
@@ -734,7 +704,7 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
                   onClick={handleCarouselNext}
                   disabled={isLoadingCarouselVideo}
                   className="w-5 h-5 rounded hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-white/70 hover:text-white transition-colors"
-                  title="Next video"
+                  title={tc("Next video")}
                 >
                   <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
@@ -770,9 +740,7 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
                 {nodeData.error || "Failed"}
               </span>
             ) : (
-              <span className="text-neutral-500 text-[10px]">
-                Run to generate
-              </span>
+              <span className="text-neutral-500 text-[10px]">{tc("Run to generate")}</span>
             )}
           </div>
         )}

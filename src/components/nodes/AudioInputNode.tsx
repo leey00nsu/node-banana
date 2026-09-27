@@ -1,21 +1,29 @@
 "use client";
 
+import { useCanvasTranslation } from "../../leesfield/localization";
+import { Handle } from "../../leesfield/port-handle";
+
 import { useCallback, useRef, useState, useEffect } from "react";
-import { Handle, Position, NodeProps, Node } from "@xyflow/react";
+import { Position, NodeProps, Node } from "@xyflow/react";
 import { BaseNode } from "./BaseNode";
-import { useWorkflowStore } from "@/store/workflowStore";
-import { AudioInputNodeData } from "@/types";
-import { useAudioVisualization } from "@/hooks/useAudioVisualization";
-import { useAudioPlayback } from "@/hooks/useAudioPlayback";
-import { downloadMedia } from "@/utils/downloadMedia";
-import { useShowHandleLabels } from "@/hooks/useShowHandleLabels";
 import { HandleLabel } from "./HandleLabel";
+import {
+  AudioInputNodeData,
+  HostedInputHistory,
+  downloadMedia,
+  useAudioPlayback,
+  useAudioVisualization,
+  useShowHandleLabels,
+  useWorkflowStore,
+} from "../../leesfield/upstream-node-host";
 
 type AudioInputNodeType = Node<AudioInputNodeData, "audioInput">;
 
 export function AudioInputNode({ id, data, selected }: NodeProps<AudioInputNodeType>) {
+  const tc = useCanvasTranslation();
   const nodeData = data;
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
+  const writable = useWorkflowStore((state) => state.writable);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const showLabels = useShowHandleLabels(selected);
 
@@ -40,6 +48,7 @@ export function AudioInputNode({ id, data, selected }: NodeProps<AudioInputNodeT
     waveformContainerRef,
     isPlaying,
     currentTime,
+    duration: playbackDuration,
     handlePlayPause,
     handleSeek,
     formatTime,
@@ -51,6 +60,7 @@ export function AudioInputNode({ id, data, selected }: NodeProps<AudioInputNodeT
 
   const handleFileChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (!writable) return;
       const file = e.target.files?.[0];
       if (!file) return;
 
@@ -90,13 +100,14 @@ export function AudioInputNode({ id, data, selected }: NodeProps<AudioInputNodeT
       };
       reader.readAsDataURL(file);
     },
-    [id, updateNodeData]
+    [id, updateNodeData, writable]
   );
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
+      if (!writable) return;
 
       const file = e.dataTransfer.files?.[0];
       if (!file) return;
@@ -108,7 +119,7 @@ export function AudioInputNode({ id, data, selected }: NodeProps<AudioInputNodeT
         fileInputRef.current.dispatchEvent(new Event("change", { bubbles: true }));
       }
     },
-    []
+    [writable]
   );
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -117,6 +128,7 @@ export function AudioInputNode({ id, data, selected }: NodeProps<AudioInputNodeT
   }, []);
 
   const handleRemove = useCallback(() => {
+    if (!writable) return;
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current = null;
@@ -128,7 +140,7 @@ export function AudioInputNode({ id, data, selected }: NodeProps<AudioInputNodeT
       duration: null,
       format: null,
     });
-  }, [id, updateNodeData, audioRef]);
+  }, [id, updateNodeData, audioRef, writable]);
 
   return (
     <BaseNode
@@ -141,6 +153,7 @@ export function AudioInputNode({ id, data, selected }: NodeProps<AudioInputNodeT
         ref={fileInputRef}
         type="file"
         accept="audio/mp3,audio/mpeg,audio/wav,audio/ogg,audio/aac,audio/mp4,audio/*"
+        disabled={!writable}
         onChange={handleFileChange}
         className="hidden"
       />
@@ -148,9 +161,7 @@ export function AudioInputNode({ id, data, selected }: NodeProps<AudioInputNodeT
       {nodeData.audioFile ? (
         <div className="relative group flex-1 flex flex-col min-h-0 gap-2">
           {nodeData.isOptional && (
-            <span className="absolute top-1 left-1 z-10 text-[9px] font-medium text-neutral-300 bg-black/50 px-1.5 py-0.5 rounded">
-              Optional
-            </span>
+            <span className="absolute top-1 left-1 z-10 text-[9px] font-medium text-neutral-300 bg-black/50 px-1.5 py-0.5 rounded">{tc("Optional")}</span>
           )}
           {/* Filename and duration */}
           <div className="flex items-center justify-between shrink-0">
@@ -167,7 +178,7 @@ export function AudioInputNode({ id, data, selected }: NodeProps<AudioInputNodeT
           {/* Waveform visualization */}
           {isLoading ? (
             <div className="flex-1 flex items-center justify-center bg-neutral-900/50 rounded min-h-[60px]">
-              <span className="text-xs text-neutral-500">Loading waveform...</span>
+              <span className="text-xs text-neutral-500">{tc("Loading waveform...")}</span>
             </div>
           ) : waveformData ? (
             <div
@@ -179,7 +190,7 @@ export function AudioInputNode({ id, data, selected }: NodeProps<AudioInputNodeT
             </div>
           ) : (
             <div className="flex-1 flex items-center justify-center bg-neutral-900/50 rounded min-h-[60px]">
-              <span className="text-xs text-neutral-500">Processing...</span>
+              <span className="text-xs text-neutral-500">{tc("Processing...")}</span>
             </div>
           )}
 
@@ -188,7 +199,7 @@ export function AudioInputNode({ id, data, selected }: NodeProps<AudioInputNodeT
             <button
               onClick={handlePlayPause}
               className="w-7 h-7 flex items-center justify-center bg-violet-600 hover:bg-violet-500 rounded transition-colors"
-              title={isPlaying ? "Pause" : "Play"}
+              title={isPlaying ? tc("Pause") : tc("Play")}
             >
               {isPlaying ? (
                 <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 24 24">
@@ -203,10 +214,10 @@ export function AudioInputNode({ id, data, selected }: NodeProps<AudioInputNodeT
 
             {/* Progress bar / scrubber */}
             <div className="flex-1 h-1 bg-neutral-700 rounded-full overflow-hidden relative">
-              {audioRef.current?.duration && isFinite(audioRef.current.duration) && (
+              {Number.isFinite(playbackDuration) && playbackDuration > 0 && (
                 <div
                   className="h-full bg-violet-500 transition-all"
-                  style={{ width: `${(currentTime / audioRef.current.duration) * 100}%` }}
+                  style={{ width: `${(currentTime / playbackDuration) * 100}%` }}
                 />
               )}
             </div>
@@ -220,9 +231,9 @@ export function AudioInputNode({ id, data, selected }: NodeProps<AudioInputNodeT
           {/* Download button */}
           <button
             onClick={() => downloadMedia(nodeData.audioFile!, "audio")}
-            aria-label="Download audio"
+            aria-label={tc("Download audio")}
             className="absolute top-1 right-7 w-5 h-5 bg-black/60 hover:bg-black/80 text-white rounded text-xs opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-white transition-opacity flex items-center justify-center"
-            title="Download audio"
+            title={tc("Download audio")}
           >
             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
@@ -231,6 +242,8 @@ export function AudioInputNode({ id, data, selected }: NodeProps<AudioInputNodeT
           {/* Remove button */}
           <button
             onClick={handleRemove}
+            disabled={!writable}
+            aria-label={tc("Remove audio")}
             className="absolute top-1 right-1 w-5 h-5 bg-black/60 text-white rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
           >
             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -241,22 +254,25 @@ export function AudioInputNode({ id, data, selected }: NodeProps<AudioInputNodeT
       ) : (
         <div
           role="button"
-          tabIndex={0}
-          aria-label="Upload audio file"
-          onClick={() => fileInputRef.current?.click()}
-          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileInputRef.current?.click(); } }}
+          tabIndex={writable ? 0 : -1}
+          aria-label={tc("Upload audio file")}
+          aria-disabled={!writable}
+          onClick={() => { if (writable) fileInputRef.current?.click(); }}
+          onKeyDown={(e) => { if (writable && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); fileInputRef.current?.click(); } }}
           onDrop={handleDrop}
           onDragOver={handleDragOver}
-          className={`w-full h-full bg-neutral-900/40 flex flex-col items-center justify-center cursor-pointer hover:bg-neutral-800/60 transition-colors ${nodeData.isOptional ? "border-2 border-dashed border-neutral-600" : ""}`}
+          className={`w-full h-full bg-neutral-900/40 flex flex-col items-center justify-center transition-colors ${writable ? "cursor-pointer hover:bg-neutral-800/60" : "cursor-not-allowed opacity-60"} ${nodeData.isOptional ? "border-2 border-dashed border-neutral-600" : ""}`}
         >
           <svg className="w-8 h-8 text-neutral-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 9l10.5-3m0 6.553v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 11-.99-3.467l2.31-.66a2.25 2.25 0 001.632-2.163zm0 0V2.25L9 5.25v10.303m0 0v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 01-.99-3.467l2.31-.66A2.25 2.25 0 009 15.553z" />
           </svg>
           <span className="text-xs text-neutral-500 mt-2">
-            {nodeData.isOptional ? "Optional" : "Drop audio or click"}
+            {nodeData.isOptional ? tc("Optional") : tc("Drop audio or click")}
           </span>
         </div>
       )}
+
+      <HostedInputHistory nodeId={id} mediaType="audio" selectedAssetId={nodeData.config?.assetId ?? null} />
 
       <Handle
         type="target"
@@ -265,7 +281,7 @@ export function AudioInputNode({ id, data, selected }: NodeProps<AudioInputNodeT
         data-handletype="audio"
         style={{ background: "rgb(167, 139, 250)" }}
       />
-      <HandleLabel label="Audio" side="target" color="var(--handle-color-audio)" visible={showLabels} />
+      <HandleLabel label={tc("Audio")} side="target" color="var(--handle-color-audio)" visible={showLabels} />
       <Handle
         type="source"
         position={Position.Right}
@@ -273,7 +289,7 @@ export function AudioInputNode({ id, data, selected }: NodeProps<AudioInputNodeT
         data-handletype="audio"
         style={{ background: "rgb(167, 139, 250)" }}
       />
-      <HandleLabel label="Audio" side="source" color="var(--handle-color-audio)" visible={showLabels} />
+      <HandleLabel label={tc("Audio")} side="source" color="var(--handle-color-audio)" visible={showLabels} />
     </BaseNode>
   );
 }

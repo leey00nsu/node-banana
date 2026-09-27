@@ -1,5 +1,7 @@
 "use client";
 
+import { useCanvasTranslation } from "../leesfield/localization";
+
 import { useCallback, useRef, useState, useEffect, DragEvent, useMemo, type ComponentType } from "react";
 import {
   ReactFlow,
@@ -352,6 +354,7 @@ export const isPanningRef = { current: false };
 export const isDraggingNodeRef = { current: false };
 
 export function WorkflowCanvas() {
+  const tc = useCanvasTranslation();
   const { nodes, edges, groups, isModalOpen, showQuickstart, navigationTarget, canvasNavigationSettings, dimmedNodeIds, skippedNodeIds } =
     useWorkflowStore(useShallow((state) => ({
       nodes: state.nodes,
@@ -2233,12 +2236,12 @@ export function WorkflowCanvas() {
           <div className="bg-neutral-800 border border-neutral-600 rounded-lg px-6 py-4 shadow-xl">
             <p className="text-neutral-200 text-sm font-medium">
               {dropType === "workflow"
-                ? "Drop to load workflow"
+                ? tc("Drop to load workflow")
                 : dropType === "node"
-                ? "Drop to create node"
+                ? tc("Drop to create node")
                 : dropType === "audio"
-                ? "Drop audio to create node"
-                : "Drop image to create node"}
+                ? tc("Drop audio to create node")
+                : tc("Drop image to create node")}
             </p>
           </div>
         </div>
@@ -2249,7 +2252,7 @@ export function WorkflowCanvas() {
         <div className="absolute inset-0 bg-black/50 z-50 flex items-center justify-center">
           <div className="bg-neutral-800 border border-neutral-600 rounded-lg px-6 py-4 shadow-xl flex items-center gap-3">
             <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-            <p className="text-neutral-200 text-sm font-medium">Splitting image grid...</p>
+            <p className="text-neutral-200 text-sm font-medium">{tc("Splitting image grid...")}</p>
           </div>
         </div>
       )}
@@ -2384,8 +2387,8 @@ export function WorkflowCanvas() {
             />
             <button
               type="button"
-              aria-label="Hide minimap"
-              title="Hide minimap"
+              aria-label={tc("Hide minimap")}
+              title={tc("Hide minimap")}
               disabled={tutorialActive && lockedFeatures}
               onClick={() => setIsMinimapVisible(false)}
               style={MINIMAP_CLOSE_POSITION}
@@ -2399,8 +2402,8 @@ export function WorkflowCanvas() {
         ) : (
           <button
             type="button"
-            aria-label="Show minimap"
-            title="Show minimap"
+            aria-label={tc("Show minimap")}
+            title={tc("Show minimap")}
             disabled={tutorialActive && lockedFeatures}
             onClick={() => setIsMinimapVisible(true)}
             style={{ right: MINIMAP_GEOMETRY.margin, bottom: MINIMAP_GEOMETRY.margin }}
@@ -2429,9 +2432,7 @@ export function WorkflowCanvas() {
               <button
                 onClick={() => browseRegistry.open(node.id)}
                 className="nodrag nopan text-[10px] py-0.5 px-1.5 bg-neutral-700 hover:bg-neutral-600 border border-neutral-600 rounded text-neutral-300 transition-colors"
-              >
-                Browse
-              </button>
+              >{tc("Browse")}</button>
             ) : undefined;
 
             // Optional toggle for input nodes
@@ -2445,9 +2446,9 @@ export function WorkflowCanvas() {
                     ? "bg-amber-600/80 hover:bg-amber-500/80 text-white border border-amber-500/50"
                     : "bg-neutral-700 hover:bg-neutral-600 border border-neutral-600 text-neutral-400"
                 }`}
-                title={isOptional ? "This input is optional — empty inputs will be skipped" : "Mark as optional — empty inputs will skip this branch"}
+                title={isOptional ? tc("This input is optional — empty inputs will be skipped") : tc("Mark as optional — empty inputs will skip this branch")}
               >
-                {isOptional ? "Optional" : "Required"}
+                {isOptional ? tc("Optional") : tc("Required")}
               </button>
             ) : undefined;
 
@@ -2485,7 +2486,7 @@ export function WorkflowCanvas() {
                       ? "text-blue-400 border-blue-600/60 hover:text-blue-200"
                       : "text-neutral-500 border-neutral-600 hover:text-neutral-200"
                   }`}
-                  title={hasFallback ? `Fallback: ${fallbackName}` : "Set fallback model (runs if primary fails)"}
+                  title={hasFallback ? `Fallback: ${fallbackName}` : tc("Set fallback model (runs if primary fails)")}
                 >
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M4 12a8 8 0 0 1 16 0M12 4v8M8 12Q9 7 12 4M16 12Q15 7 12 4M4 12l8 8M20 12l-8 8M11 20h2" />
@@ -2671,7 +2672,7 @@ export function WorkflowCanvas() {
         <ModelSearchDialog
           isOpen
           onClose={() => setFallbackDialogState(null)}
-          title="Select fallback model"
+          title={tc("Select fallback model")}
           initialCapabilityFilter={fallbackDialogState.capability}
           showClearOption
           onClearSelection={() => {

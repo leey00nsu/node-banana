@@ -1,5 +1,7 @@
 "use client";
 
+import { useCanvasTranslation } from "../leesfield/localization";
+
 import { useEffect, useState } from "react";
 import { create } from "zustand";
 
@@ -52,6 +54,7 @@ const typeIcons = {
 };
 
 export function Toast() {
+  const tc = useCanvasTranslation();
   const { message, type, persistent, details, hide } = useToast();
   const [isExpanded, setIsExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -93,7 +96,7 @@ export function Toast() {
           <button
             onClick={handleCopy}
             className="p-1 rounded hover:bg-white/10 transition-colors"
-            title="Copy message"
+            title={tc("Copy message")}
           >
             {copied ? (
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -108,7 +111,7 @@ export function Toast() {
           <button
             onClick={hide}
             className="p-1 rounded hover:bg-white/10 transition-colors"
-            title="Dismiss"
+            title={tc("Dismiss")}
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -121,7 +124,7 @@ export function Toast() {
               onClick={() => setIsExpanded(!isExpanded)}
               className="px-4 py-1 text-xs opacity-70 hover:opacity-100 transition-opacity text-left border-t border-white/10"
             >
-              {isExpanded ? "Hide details" : "Show details"}
+              {isExpanded ? tc("Hide details") : tc("Show details")}
             </button>
             {isExpanded && (
               <div className="px-4 pb-3">

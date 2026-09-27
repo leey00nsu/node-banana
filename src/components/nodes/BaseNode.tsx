@@ -1,10 +1,9 @@
 "use client";
 
 import { ReactNode, useCallback, useRef, useLayoutEffect } from "react";
-import { Node, NodeResizer, OnResize, useReactFlow } from "@xyflow/react";
-import { useWorkflowStore } from "@/store/workflowStore";
-import { isPanningRef, isDraggingNodeRef } from "@/components/WorkflowCanvas";
-import { getMediaDimensions, calculateAspectFitSize } from "@/utils/nodeDimensions";
+import { Node, NodeResizer, OnResize, useReactFlow, useStore } from "@xyflow/react";
+import { isPanningRef, isDraggingNodeRef, useWorkflowStore } from "../../leesfield/upstream-node-host";
+import { getMediaDimensions, calculateAspectFitSize } from "../../utils/nodeDimensions";
 
 const DEFAULT_NODE_DIMENSION = 300;
 
@@ -75,8 +74,19 @@ export function BaseNode({
 }: BaseNodeProps) {
   const currentNodeIds = useWorkflowStore((state) => state.currentNodeIds);
   const setHoveredNodeId = useWorkflowStore((state) => state.setHoveredNodeId);
+  const writable = useWorkflowStore((state) => state.writable);
   const isCurrentlyExecuting = currentNodeIds.includes(id);
   const { getNodes, setNodes } = useReactFlow();
+  // Total height and reserved panel space must come from the same Flow update.
+  // Keep the media body rigid while only the Settings panel animates.
+  const bodyHeight = useStore((state) => {
+    const node = state.nodeLookup.get(id);
+    if (!node || !settingsPanel) return undefined;
+    const reserved = node.data?._settingsPanelHeight;
+    return Math.max(0, getNodeDimension(node, "height") - (
+      typeof reserved === "number" && Number.isFinite(reserved) ? reserved : 0
+    ));
+  });
 
   const settingsPanelRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -92,24 +102,22 @@ export function BaseNode({
       animationTimeoutRef.current = null;
     }
 
-    const contentEl = contentRef.current;
     const ANIMATION_MS = 160;
 
     if (!settingsExpanded && trackedSettingsHeightRef.current > 0) {
       // --- COLLAPSE ---
-      const heightToRemove = trackedSettingsHeightRef.current;
       trackedSettingsHeightRef.current = 0;
       isAnimatingRef.current = true;
 
-      // Lock content height for the full animation duration
-      if (contentEl) {
-        contentEl.style.height = contentEl.offsetHeight + "px";
-      }
 
       setNodes((nodes) =>
         nodes.map((node) => {
           if (node.id !== id) return node;
           const currentHeight = getNodeDimension(node, "height");
+          // A rapid collapse can cancel expansion before its height commits.
+          const applied = node.data?._settingsPanelHeight;
+          const heightToRemove = typeof applied === "number" && Number.isFinite(applied)
+            ? Math.max(0, applied) : 0;
           const newHeight = Math.max(minHeight, currentHeight - heightToRemove);
           return {
             ...applyNodeDimensions(node, getNodeDimension(node, "width"), newHeight),
@@ -120,22 +128,12 @@ export function BaseNode({
 
       animationTimeoutRef.current = setTimeout(() => {
         isAnimatingRef.current = false;
-        if (contentEl) contentEl.style.height = "";
       }, ANIMATION_MS);
     } else if (settingsExpanded && settingsPanel) {
       // --- EXPAND ---
-      // Lock the content wrapper rigid so flex can't redistribute space as the
-      // settings panel grows. Without this, flex-1 + min-h-0 lets the wrapper
-      // shrink between CSS transition frames and the ResizeObserver setNodes catch-up.
+      // The media body retains its height throughout the panel animation.
       isAnimatingRef.current = true;
 
-      if (contentEl) {
-        const wrapperEl = contentEl.parentElement as HTMLElement | null;
-        if (wrapperEl) {
-          wrapperEl.style.flex = "none";
-          wrapperEl.style.height = wrapperEl.offsetHeight + "px";
-        }
-      }
 
       animationTimeoutRef.current = setTimeout(() => {
         isAnimatingRef.current = false;
@@ -162,13 +160,6 @@ export function BaseNode({
           );
         }
 
-        if (contentEl) {
-          const wrapperEl = contentEl.parentElement as HTMLElement | null;
-          if (wrapperEl) {
-            wrapperEl.style.flex = "";
-            wrapperEl.style.height = "";
-          }
-        }
       }, ANIMATION_MS);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -193,12 +184,6 @@ export function BaseNode({
         // multiple re-renders. The expand timeout will apply one final update.
         if (isAnimatingRef.current) continue;
 
-        // Lock content height to prevent image flicker during resize
-        const contentEl = contentRef.current;
-        if (contentEl) {
-          contentEl.style.height = contentEl.offsetHeight + "px";
-        }
-
         setNodes((nodes) =>
           nodes.map((node) => {
             if (node.id !== id) return node;
@@ -211,12 +196,6 @@ export function BaseNode({
           })
         );
 
-        // Release locked height after layout settles
-        requestAnimationFrame(() => {
-          if (contentEl) {
-            contentEl.style.height = "";
-          }
-        });
       }
     });
 
@@ -250,6 +229,7 @@ export function BaseNode({
 
   const handleResizeHandleDblClick = useCallback(
     async (e: React.MouseEvent) => {
+      if (!writable) return;
       const target = e.target as HTMLElement;
       if (!target.closest(".react-flow__resize-control")) return;
       if (!aspectFitMedia) return;
@@ -282,7 +262,7 @@ export function BaseNode({
         })
       );
     },
-    [aspectFitMedia, id, fullBleed, getNodes, setNodes]
+    [aspectFitMedia, id, fullBleed, getNodes, setNodes, writable]
   );
 
   const hasExpandedSettings = settingsExpanded && settingsPanel;
@@ -308,12 +288,12 @@ export function BaseNode({
                 ? "ring-1 ring-blue-500"
                 : ""
           }`
-        : "contents"}
+        : settingsPanel ? "relative flex flex-col w-full h-full overflow-visible" : "contents"}
       onDoubleClick={handleResizeHandleDblClick}
       data-tutorial={hasExpandedSettings ? dataTutorial : undefined}
     >
       <NodeResizer
-        isVisible={selected}
+        isVisible={selected && writable}
         minWidth={minWidth}
         minHeight={minHeight}
         lineClassName="!border-transparent"
@@ -321,6 +301,7 @@ export function BaseNode({
         onResize={handleResize}
       />
       <div
+        style={bodyHeight === undefined ? undefined : { height: bodyHeight, flex: "none" }}
         className={`
           ${hasExpandedSettings ? "flex-1 min-h-0 w-full" : "h-full w-full"} flex flex-col overflow-visible relative
           ${fullBleed
@@ -361,7 +342,7 @@ export function BaseNode({
         <div ref={contentRef} style={{ contain: "layout style" }} className={contentClassName ?? (fullBleed ? "flex-1 min-h-0 relative" : "px-3 pb-4 flex-1 min-h-0 overflow-visible flex flex-col")}>{children}</div>
       </div>
       {settingsPanel && (
-        <div ref={settingsPanelRef}>
+        <div ref={settingsPanelRef} className="shrink-0">
           {settingsPanel}
         </div>
       )}

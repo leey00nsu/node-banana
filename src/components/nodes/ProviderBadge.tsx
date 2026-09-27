@@ -1,5 +1,5 @@
 import React from "react";
-import { ProviderType } from "@/types";
+import type { ProviderType } from "../../leesfield/upstream-node-host";
 
 /** Provider badge component - shows provider icon for all providers */
 export function ProviderBadge({ provider }: { provider: ProviderType }) {

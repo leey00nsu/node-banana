@@ -1,13 +1,23 @@
 "use client";
+import { CanvasSelect, CanvasInput } from "../../leesfield/inputs";
+
+
+import { useCanvasTranslation } from "../../leesfield/localization";
+import { Handle } from "../../leesfield/port-handle";
 
 import { useEffect, useMemo } from "react";
-import { Handle, Position, NodeProps, Node } from "@xyflow/react";
+import { Position, NodeProps, Node } from "@xyflow/react";
 import { BaseNode } from "./BaseNode";
-import { useWorkflowStore } from "@/store/workflowStore";
-import type { ImageResizeNodeData, ImageResizeFit, ImageResizeFormat, ImageResizeMode } from "@/types";
-import { useAdaptiveImageSrc } from "@/hooks/useAdaptiveImageSrc";
-import { useShowHandleLabels } from "@/hooks/useShowHandleLabels";
 import { HandleLabel } from "./HandleLabel";
+import {
+  ImageResizeFit,
+  ImageResizeFormat,
+  ImageResizeMode,
+  ImageResizeNodeData,
+  useAdaptiveImageSrc,
+  useShowHandleLabels,
+  useWorkflowStore,
+} from "../../leesfield/upstream-node-host";
 
 type ImageResizeNodeType = Node<ImageResizeNodeData, "imageResize">;
 
@@ -19,6 +29,7 @@ function formatBytes(bytes: number | null): string {
 }
 
 export function ImageResizeNode({ id, data, selected }: NodeProps<ImageResizeNodeType>) {
+  const tc = useCanvasTranslation();
   const nodeData = data;
   const adaptiveOutput = useAdaptiveImageSrc(nodeData.outputImage, id);
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
@@ -68,7 +79,7 @@ export function ImageResizeNode({ id, data, selected }: NodeProps<ImageResizeNod
         data-handletype="image"
         style={{ top: "50%" }}
       />
-      <HandleLabel label="Image In" side="target" color="var(--handle-color-image)" top="calc(50% - 7px)" visible={showLabels} />
+      <HandleLabel label={tc("Image In")} side="target" color="var(--handle-color-image)" top="calc(50% - 7px)" visible={showLabels} />
 
       <Handle
         type="source"
@@ -77,7 +88,7 @@ export function ImageResizeNode({ id, data, selected }: NodeProps<ImageResizeNod
         data-handletype="image"
         style={{ top: "50%" }}
       />
-      <HandleLabel label="Image Out" side="source" color="var(--handle-color-image)" top="calc(50% - 7px)" visible={showLabels} />
+      <HandleLabel label={tc("Image Out")} side="source" color="var(--handle-color-image)" top="calc(50% - 7px)" visible={showLabels} />
 
       <div className="flex-1 flex flex-col min-h-0 gap-2">
         {/* Preview */}
@@ -85,12 +96,12 @@ export function ImageResizeNode({ id, data, selected }: NodeProps<ImageResizeNod
           {nodeData.outputImage || nodeData.sourceImage ? (
             <img
               src={adaptiveOutput ?? nodeData.sourceImage ?? undefined}
-              alt="Resize preview"
+              alt={tc("Resize preview")}
               className="absolute inset-0 w-full h-full object-contain rounded"
             />
           ) : (
             <div className="absolute inset-0 flex items-center justify-center">
-              <span className="text-[10px] text-neutral-500">Connect an image</span>
+              <span className="text-[10px] text-neutral-500">{tc("Connect an image")}</span>
             </div>
           )}
           {nodeData.status === "loading" && (
@@ -117,7 +128,7 @@ export function ImageResizeNode({ id, data, selected }: NodeProps<ImageResizeNod
                     : "bg-neutral-800 text-neutral-400 hover:text-neutral-200"
                 }`}
               >
-                {m === "exact" ? "Exact" : m === "maxEdge" ? "Max Edge" : "Scale %"}
+                {m === "exact" ? tc("Exact") : m === "maxEdge" ? tc("Max Edge") : tc("Scale %")}
               </button>
             ))}
           </div>
@@ -145,7 +156,7 @@ export function ImageResizeNode({ id, data, selected }: NodeProps<ImageResizeNod
           )}
           {nodeData.mode === "maxEdge" && (
             <div className="flex items-center gap-1">
-              <label className="text-neutral-400">Max edge</label>
+              <label className="text-neutral-400">{tc("Max edge")}</label>
               <input
                 type="number"
                 min={1}
@@ -158,7 +169,7 @@ export function ImageResizeNode({ id, data, selected }: NodeProps<ImageResizeNod
           )}
           {nodeData.mode === "scale" && (
             <div className="flex items-center gap-1">
-              <label className="text-neutral-400">Scale</label>
+              <label className="text-neutral-400">{tc("Scale")}</label>
               <input
                 type="number"
                 min={1}
@@ -196,7 +207,7 @@ export function ImageResizeNode({ id, data, selected }: NodeProps<ImageResizeNod
 
           {/* Format + quality */}
           <div className="flex items-center gap-1">
-            <select
+            <CanvasSelect
               value={nodeData.format}
               onChange={(e) => updateNodeData(id, { format: e.target.value as ImageResizeFormat })}
               className="px-1.5 py-0.5 bg-neutral-800 rounded text-neutral-200"
@@ -204,11 +215,11 @@ export function ImageResizeNode({ id, data, selected }: NodeProps<ImageResizeNod
               {(["keep", "png", "jpeg", "webp"] as ImageResizeFormat[]).map((f) => (
                 <option key={f} value={f}>{formatLabel(f)}</option>
               ))}
-            </select>
+            </CanvasSelect>
             {(nodeData.format === "jpeg" || nodeData.format === "webp") && (
               <>
                 <label className="text-neutral-400">Q</label>
-                <input
+                <CanvasInput
                   type="range"
                   min={0.1}
                   max={1}
@@ -235,7 +246,7 @@ export function ImageResizeNode({ id, data, selected }: NodeProps<ImageResizeNod
             disabled={!nodeData.sourceImage || nodeData.status === "loading" || isRunning}
             className="px-3 py-1 bg-blue-600 hover:bg-blue-500 disabled:bg-neutral-700 disabled:text-neutral-500 disabled:cursor-not-allowed rounded text-white text-xs font-medium transition-colors"
           >
-            {nodeData.status === "loading" ? "Resizing..." : "Resize"}
+            {nodeData.status === "loading" ? tc("Resizing...") : tc("Resize")}
           </button>
         </div>
 

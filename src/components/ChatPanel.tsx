@@ -1,5 +1,7 @@
 "use client";
 
+import { useCanvasTranslation } from "../leesfield/localization";
+
 import { useRef, useEffect, useState, useCallback } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
@@ -20,6 +22,7 @@ interface ChatPanelProps {
 }
 
 export function ChatPanel({ isOpen, onClose, onBuildWorkflow, isBuildingWorkflow = false, onApplyEdits, workflowState, selectedNodeIds }: ChatPanelProps) {
+  const tc = useCanvasTranslation();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [input, setInput] = useState("");
   const [chipDismissed, setChipDismissed] = useState(false);
@@ -189,9 +192,7 @@ export function ChatPanel({ isOpen, onClose, onBuildWorkflow, isBuildingWorkflow
                 <button
                   onClick={() => setErrorMessage(null)}
                   className="text-xs text-red-300 hover:text-red-100 underline mt-2"
-                >
-                  Dismiss
-                </button>
+                >{tc("Dismiss")}</button>
               </div>
             </div>
           </div>
@@ -309,7 +310,7 @@ export function ChatPanel({ isOpen, onClose, onBuildWorkflow, isBuildingWorkflow
               <button
                 onClick={() => setChipDismissed(true)}
                 className="text-neutral-400 hover:text-neutral-200 transition-colors"
-                aria-label="Dismiss"
+                aria-label={tc("Dismiss")}
               >
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
